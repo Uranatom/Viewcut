@@ -161,5 +161,18 @@
   "立即应用并自动保存。": "Changes apply immediately and are saved automatically.",
   "关闭": "Close",
   "已剪切 {0} 项，选择目标文件夹后粘贴。": "Cut {0} items. Paste into the destination folder.",
-  "已复制 {0} 项，选择目标文件夹后粘贴。": "Copied {0} items. Paste into the destination folder."
+  "已复制 {0} 项，选择目标文件夹后粘贴。": "Copied {0} items. Paste into the destination folder.",
+  "撤销": "Undo",
+  "重做": "Redo",
+  "新增片段": "Add clip",
+  "删除片段": "Delete clips",
+  "调整片段范围": "Adjust clip boundaries",
+  "撤销：{0}": "Undo: {0}",
+  "重做：{0}": "Redo: {0}",
+  "已撤销：{0}。": "Undid: {0}.",
+  "已重做：{0}。": "Redid: {0}.",
+  "源视频已更改，无法应用撤销或重做。请重新加载视频。": "The source video changed. Reload it before undoing or redoing.",
+  "无法撤销或重做：{0}": "Could not undo or redo: {0}",
+  "缩小时间轴": "Zoom timeline out",
+  "放大时间轴": "Zoom timeline in"
 }

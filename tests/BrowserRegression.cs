@@ -161,6 +161,7 @@ internal static class BrowserRegression
             address.Focus();
             address.SelectAll();
             Assert(!Key(Keys.Delete), "Delete in the address textbox is left to text editing");
+            Assert(!Key(Keys.Control | Keys.Z), "Ctrl+Z in the address textbox is left to text editing");
             Assert(File.Exists(external), "Editing the address cannot delete selected files");
         }
         finally { Clipboard.SetDataObject(savedClipboard, true); }

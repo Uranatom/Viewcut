@@ -225,6 +225,27 @@ var thread = new Thread(() =>
             Assert(uiStore.Data.Jobs.Count == 0, "Marking multiple clips does not create export tasks");
             Assert(uiStore.Data.LatestClips(source, stamp).Length == 2, "Two clips appear as separate ranges");
 
+            var marked = uiStore.Data.LatestClips(source, stamp);
+            SendKey(Keys.Control | Keys.Z);
+            Assert(uiStore.Data.LatestClips(source, stamp).SequenceEqual(marked[..1]), "Ctrl+Z undoes a completed clip mark");
+            SendKey(Keys.Control | Keys.Y);
+            Assert(uiStore.Data.LatestClips(source, stamp).SequenceEqual(marked), "Ctrl+Y restores the same clip IDs and ranges");
+            SendKey(Keys.Control | Keys.Z);
+            SendKey(Keys.Control | Keys.Shift | Keys.Z);
+            Assert(uiStore.Data.LatestClips(source, stamp).SequenceEqual(marked), "Ctrl+Shift+Z also redoes clip edits");
+            await JumpTo(5.3);
+            markIn.PerformClick();
+            await JumpTo(5.9);
+            markOut.PerformClick();
+            SendKey(Keys.Control | Keys.Z);
+            await JumpTo(6.4);
+            markIn.PerformClick();
+            await JumpTo(7.2);
+            markOut.PerformClick();
+            Assert(!controls.OfType<FluentButton>().Single(button => button.Text == "重做").Enabled, "A new clip edit clears the redo branch");
+            SendKey(Keys.Control | Keys.Z);
+            Assert(uiStore.Data.LatestClips(source, stamp).SequenceEqual(marked), "Undoing a new branch keeps earlier clips intact");
+
             var beforeHover = CurrentTime();
             Mouse("Move", 2.45, Scale(12), MouseButtons.None);
             await WaitForUi(() => PreviewMatches(2.45));
@@ -248,6 +269,10 @@ var thread = new Thread(() =>
             var revised = uiStore.Data.LatestClips(source, stamp)[0];
             Assert(Math.Abs(revised.End - 1.8) < 0.05 && revised.Start == adjusted.Start,
                 "Dragging the end handle updates only the end of the same clip");
+            SendKey(Keys.Control | Keys.Z);
+            Assert(uiStore.Data.LatestClips(source, stamp)[0] == adjusted, "One undo reverses one complete handle drag");
+            SendKey(Keys.Control | Keys.Y);
+            Assert(uiStore.Data.LatestClips(source, stamp)[0] == revised, "Redo restores the adjusted boundary exactly");
             LeaveTimeline();
             Assert(app.OwnedForms.OfType<FramePreview>().All(frame => !frame.Visible), "Preview closes when the pointer leaves");
             Assert(uiStore.Data.Jobs.Count == 0, "Adjusting both handles only changes saved draft ranges");
@@ -273,6 +298,10 @@ var thread = new Thread(() =>
             }
             revised = uiStore.Data.LatestClips(source, stamp)[0];
             Assert(revised.Name == "日落 片段", "Rename dialog persists the custom name");
+            SendKey(Keys.Control | Keys.Z);
+            Assert(uiStore.Data.LatestClips(source, stamp)[0].Name is null, "Undo restores the previous clip name");
+            SendKey(Keys.Control | Keys.Y);
+            Assert(uiStore.Data.LatestClips(source, stamp)[0] == revised, "Redo restores the custom name and boundaries");
             using (var screenshot = new Bitmap(app.Width, app.Height))
             {
                 app.DrawToBitmap(screenshot, new Rectangle(0, 0, app.Width, app.Height));
@@ -290,6 +319,7 @@ var thread = new Thread(() =>
             var batch = uiStore.Data.Jobs.ToArray();
             previous.PerformClick();
             await WaitForUi(() => app.Text.Contains("HEVC") && batch.All(job => job.State is JobState.Done or JobState.Failed));
+            Assert(!controls.OfType<FluentButton>().Single(button => button.Text == "撤销").Enabled, "A different video has independent clip history");
             Assert(batch.All(job => job.State == JobState.Done && File.Exists(job.Output)), "Batch export completes while switching files");
             Assert(Path.GetFileName(batch[0].Output) == "日落 片段.mp4" && batch[1].Name is null, "Named and default files export in the same batch");
             Assert(batch[0].Start == revised.Start && batch[0].End == revised.End, "Batch export uses the final edited boundaries");
@@ -324,6 +354,10 @@ var thread = new Thread(() =>
             Assert(uiStore.Data.LatestClips(source, stamp).Length == 0 && timeline.SelectedIds.Count == 0,
                 "Batch deletion clears the markers and timeline selection");
             Assert(uiStore.Data.Clips.Single().Id == anotherSource.Id, "Deletion is limited to the loaded source");
+            SendKey(Keys.Control | Keys.Z);
+            Assert(uiStore.Data.LatestClips(source, stamp).SequenceEqual(selectedRanges), "One undo restores every clip in a multi-selection deletion");
+            SendKey(Keys.Control | Keys.Y);
+            Assert(uiStore.Data.LatestClips(source, stamp).Length == 0, "Redo reapplies the batch deletion");
             Assert(uiStore.Data.Jobs.SequenceEqual(batch) && batch.All(job => File.Exists(job.Output)),
                 "Deletion keeps export history and exported files");
             Assert(new SessionStore(Path.Combine(directory, "ui", "session.json")).Data.LatestClips(source, stamp).Length == 0,
@@ -376,6 +410,13 @@ var thread = new Thread(() =>
             controls.OfType<Button>().Single(button => button.Text == "文件").PerformClick();
             await BrowserRegression.Run(app, browser, directory);
             await PreferencesRegression.Run(app, uiStore, Path.Combine(directory, "ui", "session.json"));
+
+            bool SendKey(Keys key)
+            {
+                var message = Message.Create(app.Handle, 0x0100, (IntPtr)(key & Keys.KeyCode), IntPtr.Zero);
+                return (bool)typeof(MainWindow).GetMethod("ProcessCmdKey", BindingFlags.Instance | BindingFlags.NonPublic)!
+                    .Invoke(app, [message, key])!;
+            }
 
             void ActivateEntry() => typeof(ListView).GetMethod("OnItemActivate", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(list, [EventArgs.Empty]);

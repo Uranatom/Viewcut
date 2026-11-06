@@ -22,7 +22,6 @@ internal sealed partial class FileBrowser : UserControl
     private readonly FluentButton forward;
     private readonly FluentButton large;
     private readonly FluentButton details;
-    private readonly ToolTip tips = new();
     private readonly ImageList tileSize = new() { ImageSize = new Size(132, 84), ColorDepth = ColorDepth.Depth32Bit };
     private readonly List<string> history = [];
     private readonly Dictionary<string, Bitmap?> thumbnails = new(StringComparer.OrdinalIgnoreCase);
@@ -40,6 +39,7 @@ internal sealed partial class FileBrowser : UserControl
     public string? CurrentFolder { get; private set; }
     public bool LargeIcons => entries.View == View.LargeIcon;
     public bool EditingPath => address.Focused || search.Focused;
+    public bool EditingText => EditingPath || entries.LabelEditInProgress();
     public string[] VideoFiles => all.Where(entry => entry.Video).Select(entry => entry.Path).ToArray();
     public event Action<string>? VideoActivated;
     public event Action? PreferencesChanged;
@@ -276,8 +276,6 @@ internal sealed partial class FileBrowser : UserControl
             }
         }
         TranslateNodes(places.Nodes);
-        foreach (var button in Descendants(this).OfType<FluentButton>())
-            if (button.AccessibleName is { } name) tips.SetToolTip(button, name);
         var count = entries.SelectedIndices.Count;
         info.Text = operating ? L.T("正在处理文件…") : count > 0
             ? L.F("{0} 个项目　|　已选择 {1} 项", visible.Length, count) : L.F("{0} 个项目", visible.Length);
@@ -473,7 +471,6 @@ internal sealed partial class FileBrowser : UserControl
     {
         var button = new FluentButton { Glyph = glyph, AutoSize = true, Padding = new Padding(7, 7, 7, 7),
             AccessibleName = label, Margin = new Padding(0, 3, 4, 3) };
-        tips.SetToolTip(button, label);
         button.Click += (_, _) => action();
         return button;
     }
@@ -536,7 +533,6 @@ internal sealed partial class FileBrowser : UserControl
             refreshTimer.Dispose();
             commandMenu.Dispose();
             ClearThumbnails();
-            tips.Dispose();
             tileSize.Dispose();
         }
         base.Dispose(disposing);

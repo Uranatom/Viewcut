@@ -41,7 +41,12 @@ internal static class L
             if (template.FromEnglish == IsEnglish) continue;
             var match = template.Pattern.Match(text);
             if (!match.Success) continue;
-            return Regex.Replace(T(template.Key), @"\{(\d+)(?:[^}]*)\}", part => match.Groups["a" + part.Groups[1].Value].Value);
+            return Regex.Replace(T(template.Key), @"\{(\d+)(?:[^}]*)\}", part =>
+            {
+                var value = match.Groups["a" + part.Groups[1].Value].Value;
+                return template.Key is "已撤销：{0}。" or "已重做：{0}。" or "撤销：{0}" or "重做：{0}"
+                    ? T(Key(value) ?? value) : value;
+            });
         }
         return text;
     }

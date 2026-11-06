@@ -26,6 +26,20 @@ clips from a video in one batch.
 Lossless cuts copy the video and audio streams without re-encoding. The beginning may
 include frames from an earlier keyframe. Source videos are preserved.
 
+All action buttons use matching icons. Hover over an icon for its name and shortcut.
+Clip and export counts appear as badges.
+
+## Undo and redo
+
+Use the timeline undo/redo icons, Ctrl+Z, Ctrl+Y or Ctrl+Shift+Z. These cover clip creation,
+individual or batch deletion, renaming and boundary adjustments. A batch deletion or a
+complete handle drag is one action. A new edit clears the redo branch.
+
+History is separate for each video and kept for the current run: up to 100 edits for each
+of the 64 most recently used videos. Saved drafts persist after closing; undo history
+does not. Export jobs and exported videos are preserved. Ctrl+Z in address, search and
+filename text fields remains a text-editing command.
+
 ## Preferences
 
 Open **Preferences** beside **Choose save folder** and **Open save folder**.

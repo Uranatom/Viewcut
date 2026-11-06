@@ -9,10 +9,15 @@ internal static class PreferencesRegression
         var current = Field<string?>(app, "current");
         var browser = Descendants(app).OfType<FileBrowser>().Single();
         var folder = browser.CurrentFolder;
-        var clip = current is null ? null : new ClipDraft(current, SourceStamp.Read(current), 0.5, 1.5) { Name = "日落 Sunrise" };
-        if (clip is not null) store.Data.Clips.Add(clip);
+        var clip = store.Data.Clips.FirstOrDefault(item => item.Name is not null);
+        var oldName = clip?.Name;
         var clipIds = store.Data.Clips.Select(item => item.Id).ToArray();
         var exports = store.Data.Jobs.ToArray();
+        var undo = Descendants(app).OfType<FluentButton>().Single(button => button.Text == L.T("撤销"));
+        var redo = Descendants(app).OfType<FluentButton>().Single(button => button.Text == L.T("重做"));
+        var history = (undo.Enabled, redo.Enabled);
+        Assert(Descendants(app).OfType<FluentButton>().All(button => !string.IsNullOrEmpty(button.Icon) && !string.IsNullOrEmpty(button.ToolTipText)),
+            "Every action button has an icon and a named tooltip");
         var preferences = Descendants(app).OfType<Button>().Single(button => button.AccessibleName == "Viewcut Preferences");
         app.BeginInvoke(() => preferences.PerformClick());
         await Until(() => Application.OpenForms.OfType<PreferencesDialog>().Any());
@@ -22,6 +27,9 @@ internal static class PreferencesRegression
         Assert(L.IsEnglish && preferences.Text == "Preferences" && dialog.Text == "Preferences", "English applies instantly to the app and open preferences dialog");
         Assert(Descendants(app).OfType<Button>().Any(button => button.Text == "Choose save folder")
             && Descendants(app).OfType<Button>().Any(button => button.Text == "Open save folder"), "Top toolbar is translated");
+        Assert(Descendants(app).OfType<FluentButton>().Single(button => button.Text == "Choose save folder").ToolTipText == "Choose save folder"
+            && Descendants(app).OfType<FluentButton>().Single(button => button.Text == "Undo").ToolTipText.Contains("Ctrl+Z"),
+            "Icon tooltips follow the language and include keyboard shortcuts");
         var fileList = Descendants(browser).OfType<ListView>().Single();
         Assert(fileList.Columns[0].Text == "Name" && fileList.Columns[1].Text == "Date modified"
             && fileList.AccessibleName == "File browser", "File columns and accessibility text are translated");
@@ -54,7 +62,8 @@ internal static class PreferencesRegression
         Assert(Field<string?>(app, "current") == current && browser.CurrentFolder == folder
             && store.Data.Clips.Select(item => item.Id).SequenceEqual(clipIds) && store.Data.Jobs.SequenceEqual(exports),
             "Language and theme changes preserve the video, browser folder, clips and export history");
-        Assert(clip is null || store.Data.Clips.Single(item => item.Id == clip.Id).Name == "日落 Sunrise", "Language switches never rename saved clips");
+        Assert(clip is null || store.Data.Clips.Single(item => item.Id == clip.Id).Name == oldName, "Language switches never rename saved clips");
+        Assert((undo.Enabled, redo.Enabled) == history, "Language and theme changes preserve undo and redo availability");
         var restored = new SessionStore(sessionPath);
         Assert(restored.Data.Language == "en-US" && restored.Data.Theme == "light", "Language and theme persist in the saved session");
         using (var next = new MainWindow(restored, null))

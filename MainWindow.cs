@@ -23,6 +23,10 @@ internal sealed class MainWindow : Form
     private readonly Button pause = Button(L.T("暂停"));
     private readonly Button exportAll = Button(L.T("导出当前素材全部片段"));
     private readonly Button retry = Button(L.T("重试选中任务"));
+    private readonly FluentButton undo = new() { Text = L.T("撤销") };
+    private readonly FluentButton redo = new() { Text = L.T("重做") };
+    private readonly Dictionary<(string Path, SourceStamp Stamp), ClipHistory> clipHistories = [];
+    private long historyAccess;
     private readonly Button[] sectionButtons;
     private readonly Control[] sections;
 
@@ -168,10 +172,12 @@ internal sealed class MainWindow : Form
             AutoSizeMode = AutoSizeMode.GrowAndShrink, Margin = Padding.Empty, Padding = new Padding(8, 5, 8, 5) };
         timelineHeader.Controls.AddRange([
             new Label { Text = L.T("片段时间轴"), AutoSize = true, Margin = new Padding(12, 9, 15, 0), ForeColor = EditorTheme.Text },
-            Button("−", () => timeline.Zoom(1.5)), Button("+", () => timeline.Zoom(0.67)), Button(L.T("全览"), timeline.Fit), exportAll,
+            Button("−", () => timeline.Zoom(1.5)), Button("+", () => timeline.Zoom(0.67)), Button(L.T("全览"), timeline.Fit), undo, redo, exportAll,
             new Label { Text = L.T("悬停预览　·　滚轮缩放　·　Shift + 滚轮平移"), AutoSize = true,
                 ForeColor = EditorTheme.Muted, Margin = new Padding(12, 9, 0, 0) }
         ]);
+        undo.Click += (_, _) => ApplyHistory(false);
+        redo.Click += (_, _) => ApplyHistory(true);
         var timelinePanel = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1,
             BackColor = EditorTheme.Surface, Margin = Padding.Empty };
         timelinePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -452,6 +458,7 @@ internal sealed class MainWindow : Form
             return;
         }
         var clip = new ClipDraft(current!, sourceStamp!, from, end);
+        var before = CaptureEditState();
         store.Data.Clips.Add(clip);
         if (!Save())
         {
@@ -462,6 +469,7 @@ internal sealed class MainWindow : Form
         selectedClip = clip.Id;
         selectedClips.Clear();
         selectedClips.Add(clip.Id);
+        RecordEdit("新增片段", before);
         SetStatus(L.F("已标记片段 {0}–{1}，选完后点击导出。", Clock(from), Clock(end)));
         RefreshClips();
     }
@@ -596,6 +604,7 @@ internal sealed class MainWindow : Form
     {
         var previous = clipDrafts.FirstOrDefault(clip => clip.Id == edited.Id);
         if (previous is null || edited.End <= edited.Start) return;
+        var before = CaptureEditState();
         var drafts = store.Data.Clips;
         var index = drafts.IndexOf(previous);
         var updated = previous with
@@ -610,6 +619,7 @@ internal sealed class MainWindow : Form
             RefreshClips();
             return;
         }
+        RecordEdit("调整片段范围", before);
         SetStatus(L.F("已调整片段 {0}，点击导出应用当前范围。", edited.Number));
         RefreshClips();
     }
@@ -625,12 +635,14 @@ internal sealed class MainWindow : Form
         if (dialog.ShowDialog(this) != DialogResult.OK || dialog.ClipName == clip.Name) return;
         var index = store.Data.Clips.FindIndex(item => item.Id == id);
         if (index < 0) return;
+        var before = CaptureEditState();
         store.Data.Clips[index] = clip with { Name = dialog.ClipName };
         if (!Save())
         {
             store.Data.Clips[index] = clip;
             return;
         }
+        RecordEdit("重命名片段", before);
         RefreshClips();
         SetStatus(dialog.ClipName is { } name ? L.F("片段已命名为 {0}。", name) : L.T("已恢复默认片段名称。"));
     }
@@ -662,6 +674,7 @@ internal sealed class MainWindow : Form
         SyncClipSelection();
         exportAll.Enabled = clipDrafts.Any(clip => store.Data.CanQueue(clip, store.Data.Destination));
         exportAll.Text = ranges.Length == 0 ? L.T("导出当前素材全部片段") : L.F("导出当前素材全部片段 ({0})", ranges.Length);
+        UpdateHistory();
     }
 
     private void SelectClip(Guid? id, bool reveal = false, bool toggle = false)
@@ -693,6 +706,7 @@ internal sealed class MainWindow : Form
         var ids = clipDrafts.Where(clip => selectedClips.Contains(clip.Id)).Select(clip => clip.Id).ToHashSet();
         if (ids.Count == 0) return;
         var before = store.Data.Clips.ToArray();
+        var beforeEdit = CaptureEditState();
         store.Data.Clips.RemoveAll(clip => ids.Contains(clip.Id));
         if (!Save())
         {
@@ -704,8 +718,81 @@ internal sealed class MainWindow : Form
         preview?.Hide();
         selectedClip = null;
         selectedClips.Clear();
+        RecordEdit("删除片段", beforeEdit);
         RefreshClips();
         SetStatus(L.F("已删除 {0} 个片段标记。", ids.Count));
+    }
+
+    private ClipEditState CaptureEditState() => new(store.Data.LatestClips(current, sourceStamp), selectedClips.ToArray(), selectedClip);
+
+    private ClipHistory? History(bool create = false)
+    {
+        if (current is null || sourceStamp is null) return null;
+        var key = (current.ToUpperInvariant(), sourceStamp);
+        if (clipHistories.TryGetValue(key, out var history))
+        {
+            history.Access = ++historyAccess;
+            return history;
+        }
+        if (!create) return null;
+        if (clipHistories.Count >= 64) clipHistories.Remove(clipHistories.MinBy(pair => pair.Value.Access).Key);
+        history = new ClipHistory { Access = ++historyAccess };
+        clipHistories.Add(key, history);
+        return history;
+    }
+
+    private void RecordEdit(string name, ClipEditState before) => History(true)?.Record(name, before, CaptureEditState());
+
+    private void UpdateHistory()
+    {
+        var history = History();
+        history?.Validate(clipDrafts);
+        undo.Enabled = history?.Undo is not null;
+        redo.Enabled = history?.Redo is not null;
+        undo.Hint = history?.Undo is { } previous ? L.F("撤销：{0}", L.T(previous.Name)) + "  (Ctrl+Z)" : L.T("撤销") + "  (Ctrl+Z)";
+        redo.Hint = history?.Redo is { } next ? L.F("重做：{0}", L.T(next.Name)) + "  (Ctrl+Y / Ctrl+Shift+Z)" : L.T("重做") + "  (Ctrl+Y / Ctrl+Shift+Z)";
+    }
+
+    private void ApplyHistory(bool forward)
+    {
+        if (closing || current is null || sourceStamp is null) return;
+        var history = History();
+        history?.Validate(store.Data.LatestClips(current, sourceStamp));
+        var edit = forward ? history?.Redo : history?.Undo;
+        if (edit is null) { UpdateHistory(); return; }
+        try
+        {
+            if (SourceStamp.Read(current) != sourceStamp)
+            {
+                SetStatus(L.T("源视频已更改，无法应用撤销或重做。请重新加载视频。"));
+                return;
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        { SetStatus(L.F("无法撤销或重做：{0}", ex.Message)); return; }
+        var state = forward ? edit.After : edit.Before;
+        var before = store.Data.Clips.ToArray();
+        var position = store.Data.Clips.FindIndex(clip => clip.Stamp == sourceStamp
+            && string.Equals(clip.Source, current, StringComparison.OrdinalIgnoreCase));
+        store.Data.Clips.RemoveAll(clip => clip.Stamp == sourceStamp
+            && string.Equals(clip.Source, current, StringComparison.OrdinalIgnoreCase));
+        store.Data.Clips.InsertRange(position < 0 ? store.Data.Clips.Count : position, state.Clips);
+        if (!Save())
+        {
+            store.Data.Clips.Clear();
+            store.Data.Clips.AddRange(before);
+            return;
+        }
+        history!.Applied(forward);
+        timeline.CancelGesture();
+        preview?.Hide();
+        selectedClips.Clear();
+        selectedClips.UnionWith(state.Selection);
+        selectedClip = state.Primary;
+        RefreshClips();
+        if (ranges.FirstOrDefault(range => range.Id == selectedClip) is { } selected) timeline.Reveal(selected);
+        timeline.Focus();
+        SetStatus(L.F(forward ? "已重做：{0}。" : "已撤销：{0}。", L.T(edit.Name)));
     }
 
     private void ShowSection(int index)
@@ -820,6 +907,12 @@ internal sealed class MainWindow : Form
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
         if (closing) return true;
+        if (!browser.EditingText && (keyData == (Keys.Control | Keys.Z) || keyData == (Keys.Control | Keys.Y)
+            || keyData == (Keys.Control | Keys.Shift | Keys.Z)))
+        {
+            ApplyHistory(keyData != (Keys.Control | Keys.Z));
+            return true;
+        }
         if (browser.ContainsFocus) return base.ProcessCmdKey(ref msg, keyData);
         switch (keyData)
         {
