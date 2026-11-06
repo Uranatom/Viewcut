@@ -9,20 +9,23 @@ internal sealed partial class Player : IDisposable
     private const int Double = 5;
     private const ulong LoadRequest = 10;
     private const ulong SeekRequest = 11;
+    private readonly bool preview;
     private IntPtr handle;
     private bool loading;
     private bool started;
-    private string? nextPath;
+    private (string Path, double Start)? nextFile;
 
     public bool Ready { get; private set; }
+    public bool HasFrame { get; private set; }
     public bool Paused { get; private set; }
     public bool Seeking { get; private set; }
     public double Position { get; private set; }
     public double Duration { get; private set; }
     public string? Error { get; private set; }
 
-    public Player(IntPtr host)
+    public Player(IntPtr host, bool preview = false)
     {
+        this.preview = preview;
         handle = Create();
         if (handle == IntPtr.Zero) throw new InvalidOperationException("无法创建播放引擎。");
         try
@@ -38,6 +41,12 @@ internal sealed partial class Player : IDisposable
             Set("gpu-context", "d3d11");
             Set("hwdec", "auto-safe");
             Set("keep-open", "yes");
+            if (preview)
+            {
+                Set("aid", "no");
+                Set("sid", "no");
+                Set("pause", "yes");
+            }
             Check(Initialize(handle));
             Check(Observe(handle, 1, "time-pos", Double));
             Check(Observe(handle, 2, "duration", Double));
@@ -50,21 +59,24 @@ internal sealed partial class Player : IDisposable
         }
     }
 
-    public void Open(string path)
+    public void Open(string path, double start = 0)
     {
-        Ready = false;
+        Ready = HasFrame = false;
         Seeking = false;
         Error = null;
         Position = Duration = 0;
         if (loading)
         {
-            nextPath = path;
+            nextFile = (path, start);
             return;
         }
         loading = true;
         started = false;
-        Command(0, "set", "pause", "no");
-        Command(LoadRequest, "loadfile", path, "replace");
+        Command(0, "set", "pause", preview ? "yes" : "no");
+        if (start > 0)
+            Command(LoadRequest, "loadfile", path, "replace", "-1", "start=" + Seconds(start));
+        else
+            Command(LoadRequest, "loadfile", path, "replace");
     }
 
     public void TogglePause()
@@ -77,7 +89,7 @@ internal sealed partial class Player : IDisposable
         if (!Ready) return;
         Seeking = true;
         Command(SeekRequest, "seek",
-            Math.Clamp(seconds, 0, Duration).ToString("F6", CultureInfo.InvariantCulture),
+            Seconds(Math.Clamp(seconds, 0, Duration)),
             exact ? "absolute+exact" : "absolute+keyframes");
     }
 
@@ -107,6 +119,7 @@ internal sealed partial class Player : IDisposable
                     break;
                 case 21:
                     Seeking = false;
+                    if (Ready && started) HasFrame = true;
                     break;
                 case 22:
                     var property = Marshal.PtrToStructure<NativeProperty>(e.Data);
@@ -126,10 +139,10 @@ internal sealed partial class Player : IDisposable
     private void FinishLoad(string? error)
     {
         loading = false;
-        if (nextPath is { } next)
+        if (nextFile is { } next)
         {
-            nextPath = null;
-            Open(next);
+            nextFile = null;
+            Open(next.Path, next.Start);
             return;
         }
         Error = error;
@@ -137,6 +150,8 @@ internal sealed partial class Player : IDisposable
     }
 
     private void Set(string name, string value) => Check(SetOption(handle, name, value));
+
+    private static string Seconds(double seconds) => seconds.ToString("F6", CultureInfo.InvariantCulture);
 
     private void Command(ulong id, params string[] arguments)
     {

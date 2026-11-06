@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Runtime.InteropServices;
 
 namespace Viewcut;
 
@@ -7,77 +8,138 @@ internal sealed class MainWindow : Form
     private readonly SessionStore store;
     private readonly Exporter exporter = new(AppContext.BaseDirectory);
     private readonly CancellationTokenSource shutdown = new();
-    private readonly System.Windows.Forms.Timer timer = new() { Interval = 50 };
+    private readonly System.Windows.Forms.Timer timer = new() { Interval = 32 };
     private readonly Panel video = new() { Dock = DockStyle.Fill, BackColor = Color.Black };
-    private readonly TrackBar timeline = new() { Dock = DockStyle.Fill, Minimum = 0, Maximum = 10_000, TickStyle = TickStyle.None };
-    private readonly ListView files = CreateList(("素材", 235), ("状态", 75));
-    private readonly ListView jobs = CreateList(("状态", 65), ("片段", 215));
-    private readonly Label time = new() { AutoSize = true };
-    private readonly Label status = new() { Dock = DockStyle.Fill, AutoEllipsis = true, TextAlign = ContentAlignment.MiddleLeft };
+    private readonly ClipTimeline timeline = new();
+    private readonly ListView files = CreateList(("素材", 227), ("状态", 75));
+    private readonly ListView clips = CreateList(("片段", 62), ("时间范围", 240));
+    private readonly ListView jobs = CreateList(("状态", 72), ("导出范围", 230));
+    private readonly Label time = new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleRight };
+    private readonly Label mediaName = new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true, Text = "播放器" };
+    private readonly Label status = new() { Dock = DockStyle.Fill, AutoEllipsis = true, TextAlign = ContentAlignment.MiddleLeft,
+        ForeColor = EditorTheme.Muted };
     private readonly Button pause = Button("暂停");
-    private readonly CheckBox exact = new() { Text = "按标记导出", AutoSize = true, Margin = new Padding(8, 8, 0, 0) };
+    private readonly CheckBox exact = new() { Text = "按标记导出", AutoSize = true, FlatStyle = FlatStyle.Flat,
+        Margin = new Padding(10, 9, 2, 0) };
     private readonly Button retry = Button("重试选中任务");
-    private readonly TabControl tabs = new() { Dock = DockStyle.Fill };
+    private readonly Button[] sectionButtons;
+    private readonly Control[] sections;
 
     private Player? player;
+    private FramePreview? preview;
     private Task? worker;
     private string? current;
     private string? directory;
     private SourceStamp? sourceStamp;
     private string[] sources = [];
+    private ExportJob[] clipJobs = [];
+    private ClipRange[] ranges = [];
+    private Guid? selectedClip;
     private int folderRequest;
     private double? start;
+    private double mediaDuration;
     private bool selectingFile;
+    private bool selectingClip;
     private bool opening;
-    private bool scrubbing;
-    private long lastSeek;
     private bool closing;
 
     public MainWindow(SessionStore store, string? input)
     {
         this.store = store;
         Text = "Viewcut";
-        ClientSize = new Size(1110, 670);
-        MinimumSize = new Size(840, 480);
+        ClientSize = new Size(1216, 750);
+        MinimumSize = new Size(960, 550);
         StartPosition = FormStartPosition.CenterScreen;
-        Font = new Font("Segoe UI", 10);
+        AutoScaleMode = AutoScaleMode.Dpi;
+        Font = new Font("Segoe UI", 9);
+        BackColor = EditorTheme.Background;
+        ForeColor = EditorTheme.Text;
+        time.Font = new Font("Consolas", 11);
+        time.ForeColor = EditorTheme.Accent;
+        time.BackColor = EditorTheme.Surface;
+        time.Padding = new Padding(8, 0, 8, 0);
+        time.Text = "00:00:00.00 / 00:00:00.00";
+        mediaName.Padding = new Padding(11, 0, 11, 0);
 
-        var split = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 1, ColumnCount = 2 };
+        var split = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 1, ColumnCount = 2, Margin = Padding.Empty };
         split.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        split.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 328));
+        split.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 332));
         split.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        var playback = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1 };
+        var playback = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1,
+            BackColor = EditorTheme.Surface, Margin = new Padding(0, 0, 8, 0) };
+        playback.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         playback.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        playback.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
-        playback.RowStyles.Add(new RowStyle(SizeType.Absolute, 68));
-        playback.Controls.Add(video, 0, 0);
-        playback.Controls.Add(timeline, 0, 1);
-
-        var playbackControls = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoScroll = true };
-        playbackControls.Controls.AddRange([pause, Button("I  起点", MarkStart), Button("O  保存片段", MarkEnd),
-            Button("P  上一条", () => MoveFile(-1)), Button("N  下一条", () => MoveFile(1)), Button("X  跳过", Skip), exact, time]);
-        playback.Controls.Add(playbackControls, 0, 2);
+        video.Margin = Padding.Empty;
+        video.Paint += DrawEmptyVideo;
+        playback.Controls.Add(mediaName, 0, 0);
+        playback.Controls.Add(video, 0, 1);
         split.Controls.Add(playback, 0, 0);
 
-        var sourceTab = new TabPage("素材");
-        sourceTab.Controls.Add(files);
-        var exportTab = new TabPage("导出");
-        exportTab.Controls.Add(jobs);
+        var exportPage = new Panel { Dock = DockStyle.Fill };
+        exportPage.Controls.Add(jobs);
         retry.Dock = DockStyle.Bottom;
-        exportTab.Controls.Add(retry);
-        tabs.TabPages.AddRange([sourceTab, exportTab]);
-        split.Controls.Add(tabs, 1, 0);
+        exportPage.Controls.Add(retry);
+        sections = [files, clips, exportPage];
+        sectionButtons = [Button("素材", () => ShowSection(0)), Button("片段", () => ShowSection(1)),
+            Button("导出", () => ShowSection(2))];
+        var sectionNav = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false,
+            Margin = Padding.Empty, Padding = new Padding(6, 2, 0, 0) };
+        sectionNav.Controls.AddRange(sectionButtons);
+        var sectionBody = new Panel { Dock = DockStyle.Fill, Margin = Padding.Empty };
+        sectionBody.Controls.AddRange(sections);
+        var sidebar = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1,
+            BackColor = EditorTheme.Surface, Margin = Padding.Empty };
+        sidebar.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+        sidebar.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        sidebar.Controls.Add(sectionNav, 0, 0);
+        sidebar.Controls.Add(sectionBody, 0, 1);
+        split.Controls.Add(sidebar, 1, 0);
+        ShowSection(0);
 
-        var toolbar = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false };
-        toolbar.Controls.AddRange([Button("打开视频", ChooseFile), Button("打开文件夹", ChooseFolder),
+        var toolbar = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Margin = Padding.Empty };
+        var wordmark = new Label { Text = "Viewcut", AutoSize = true, Font = new Font("Segoe UI Semibold", 16),
+            Margin = new Padding(0, 2, 18, 0), ForeColor = EditorTheme.Accent };
+        toolbar.Controls.AddRange([wordmark, Button("打开视频", ChooseFile), Button("打开文件夹", ChooseFolder),
             Button("选择保存目录", ChooseDestination), Button("打开保存目录", OpenDestination)]);
-        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1, Padding = new Padding(6) };
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+
+        var transport = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Margin = Padding.Empty };
+        var save = Button("O  保存片段", MarkEnd);
+        Emphasize(save, true);
+        transport.Controls.AddRange([pause, Button("P  上一条", () => MoveFile(-1)), Button("N  下一条", () => MoveFile(1)),
+            Button("I  起点", MarkStart), save, Button("X  跳过", Skip), exact]);
+        var transportBar = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 1, ColumnCount = 2, Margin = Padding.Empty };
+        transportBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        transportBar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 236));
+        transportBar.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        transportBar.Controls.Add(transport, 0, 0);
+        transportBar.Controls.Add(time, 1, 0);
+
+        var timelineHeader = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Margin = Padding.Empty };
+        timelineHeader.Controls.AddRange([
+            new Label { Text = "片段时间轴", AutoSize = true, Margin = new Padding(12, 9, 15, 0), ForeColor = EditorTheme.Text },
+            Button("−", () => timeline.Zoom(1.5)), Button("+", () => timeline.Zoom(0.67)), Button("全览", timeline.Fit),
+            new Label { Text = "悬停预览　·　滚轮缩放　·　Shift + 滚轮平移", AutoSize = true,
+                ForeColor = EditorTheme.Muted, Margin = new Padding(12, 9, 0, 0) }
+        ]);
+        var timelinePanel = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1,
+            BackColor = EditorTheme.Surface, Margin = Padding.Empty };
+        timelinePanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+        timelinePanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        timeline.Margin = Padding.Empty;
+        timelinePanel.Controls.Add(timelineHeader, 0, 0);
+        timelinePanel.Controls.Add(timeline, 0, 1);
+
+        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 5, ColumnCount = 1, Padding = new Padding(10) };
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 41));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 119));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
         layout.Controls.Add(toolbar, 0, 0);
         layout.Controls.Add(split, 0, 1);
-        layout.Controls.Add(status, 0, 2);
+        layout.Controls.Add(transportBar, 0, 2);
+        layout.Controls.Add(timelinePanel, 0, 3);
+        layout.Controls.Add(status, 0, 4);
         Controls.Add(layout);
 
         files.RetrieveVirtualItem += (_, e) =>
@@ -101,29 +163,31 @@ internal sealed class MainWindow : Form
         jobs.SelectedIndexChanged += (_, _) => UpdateRetry();
         retry.Click += (_, _) => RetrySelected();
         pause.Click += (_, _) => player?.TogglePause();
-        timeline.MouseDown += (_, e) =>
+        clips.RetrieveVirtualItem += (_, e) =>
         {
-            if (e.Button != MouseButtons.Left) return;
-            scrubbing = true;
-            lastSeek = 0;
-            Scrub(e.X, false);
+            var clip = ranges[e.ItemIndex];
+            var job = clipJobs[e.ItemIndex];
+            e.Item = new ListViewItem([$"{clip.Number:D2}", $"{Clock(clip.Start)}  →  {Clock(clip.End)}"])
+                { ToolTipText = JobLabel(job.State) + "  ·  " + Clock(clip.End - clip.Start) };
         };
-        timeline.MouseMove += (_, e) =>
+        clips.SelectedIndexChanged += (_, _) =>
         {
-            if (scrubbing) Scrub(e.X, false);
+            if (!selectingClip && clips.SelectedIndices.Count == 1)
+                SelectClip(ranges[clips.SelectedIndices[0]].Id, reveal: true);
         };
-        timeline.MouseUp += (_, e) =>
+        clips.DoubleClick += (_, _) =>
         {
-            if (!scrubbing) return;
-            scrubbing = false;
-            Scrub(e.X, true);
+            if (clips.SelectedIndices.Count == 1) player?.Seek(ranges[clips.SelectedIndices[0]].Start, true);
         };
-        timeline.MouseCaptureChanged += (_, _) => scrubbing = false;
-        timeline.Scroll += (_, _) =>
+        timeline.ClipSelected += id =>
         {
-            if (!scrubbing && player is { Ready: true } engine)
-                engine.Seek(engine.Duration * timeline.Value / timeline.Maximum, true);
+            SelectClip(id);
+            ShowSection(1);
         };
+        timeline.ClipAdjusted += AdjustClip;
+        timeline.SeekRequested += seconds => player?.Seek(seconds, true);
+        timeline.PreviewRequested += PreviewAt;
+        Deactivate += (_, _) => timeline.CancelGesture();
         timer.Tick += (_, _) => UpdatePlayback();
         exact.CheckedChanged += (_, _) => SetStatus(exact.Checked
             ? "按标记导出会重编码片段，支持 8 位 SDR 4:2:0。"
@@ -199,11 +263,17 @@ internal sealed class MainWindow : Form
             var stamp = SourceStamp.Read(path);
             player ??= new Player(video.Handle);
             player.Open(path);
+            preview?.ResetMedia();
             current = path;
             sourceStamp = stamp;
             start = null;
+            selectedClip = null;
+            mediaDuration = 0;
+            timeline.SetMedia(0);
+            RefreshClips();
             opening = true;
             Text = $"Viewcut  ·  {Path.GetFileName(path)}";
+            mediaName.Text = Path.GetFileName(path);
             SetStatus($"正在打开 {Path.GetFileName(path)}");
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or DllNotFoundException
@@ -256,6 +326,7 @@ internal sealed class MainWindow : Form
             return;
         }
         start = null;
+        selectedClip = job.Id;
         SetStatus($"片段 {Clock(from)}–{Clock(end)} 已排队。");
         RefreshJobs();
         StartQueue();
@@ -263,7 +334,7 @@ internal sealed class MainWindow : Form
 
     private bool CanMark()
     {
-        if (player is { Ready: true, Seeking: false, Duration: > 0 } && !scrubbing && sourceStamp is not null)
+        if (player is { Ready: true, Seeking: false, Duration: > 0 } && sourceStamp is not null)
             return true;
         SetStatus("请等画面加载或定位完成后再标记。");
         return false;
@@ -335,6 +406,7 @@ internal sealed class MainWindow : Form
 
     private void UpdatePlayback()
     {
+        preview?.UpdateFrame();
         if (player is not { } engine) return;
         engine.Poll();
         if (engine.Error is { } error)
@@ -344,27 +416,98 @@ internal sealed class MainWindow : Form
             return;
         }
         if (!engine.Ready) return;
+        if (engine.Duration > 0 && engine.Duration != mediaDuration)
+        {
+            mediaDuration = engine.Duration;
+            timeline.SetMedia(mediaDuration);
+        }
         if (opening && engine.Position > 0)
         {
             opening = false;
             SetStatus("按 I 标记起点，按 O 保存片段。");
         }
         pause.Text = engine.Paused ? "播放" : "暂停";
-        if (!scrubbing && !engine.Seeking && engine.Duration > 0)
-            timeline.Value = (int)Math.Clamp(engine.Position / engine.Duration * timeline.Maximum, 0, timeline.Maximum);
-        var marker = start is { } value ? $"  ·  入点 {Clock(value)}" : "";
-        time.Text = $"{Clock(engine.Position)} / {Clock(engine.Duration)}{marker}";
+        timeline.UpdateCursor(engine.Position, start);
+        time.Text = $"{Clock(engine.Position)} / {Clock(engine.Duration)}";
     }
 
-    private void Scrub(int x, bool finished)
+    private void PreviewAt(double? seconds, Point anchor)
     {
-        if (player is not { Ready: true, Duration: > 0 } engine) return;
-        var ratio = Math.Clamp((x - 12.0) / Math.Max(1, timeline.ClientSize.Width - 24), 0, 1);
-        timeline.Value = (int)(ratio * timeline.Maximum);
-        var now = Environment.TickCount64;
-        if (!finished && now - lastSeek < 90) return;
-        lastSeek = now;
-        engine.Seek(ratio * engine.Duration, finished);
+        if (seconds is null || current is null || closing)
+        {
+            preview?.Hide();
+            return;
+        }
+        preview ??= new FramePreview();
+        var position = seconds.Value >= mediaDuration ? Math.Max(0, mediaDuration - 0.04) : seconds.Value;
+        preview.Request(this, current, position, anchor);
+    }
+
+    private void AdjustClip(ClipRange edited)
+    {
+        var previous = clipJobs.FirstOrDefault(job => (job.ClipId ?? job.Id) == edited.Id);
+        if (previous is null || edited.End <= edited.Start) return;
+        var queue = store.Data.Jobs;
+        var index = queue.IndexOf(previous);
+        var updateQueued = previous.State == JobState.Waiting;
+        var updated = previous with
+        {
+            Start = edited.Start,
+            End = edited.End,
+            Id = updateQueued ? previous.Id : Guid.NewGuid(),
+            ClipId = edited.Id,
+            Output = null,
+            Error = null,
+            State = JobState.Waiting
+        };
+        if (updateQueued) queue[index] = updated;
+        else queue.Add(updated);
+
+        if (!Save())
+        {
+            if (updateQueued) queue[index] = previous;
+            else queue.RemoveAt(queue.Count - 1);
+            return;
+        }
+        SetStatus($"片段 {edited.Number} 已更新并加入导出队列。");
+        RefreshJobs();
+        StartQueue();
+    }
+
+    private void RefreshClips()
+    {
+        selectingClip = true;
+        clips.VirtualListSize = 0;
+        clipJobs = store.Data.LatestClips(current, sourceStamp);
+        ranges = clipJobs.Select((job, index) => new ClipRange(job.ClipId ?? job.Id, index + 1, job.Start, job.End)).ToArray();
+        clips.VirtualListSize = ranges.Length;
+        selectingClip = false;
+        sectionButtons[1].Text = ranges.Length == 0 ? "片段" : $"片段  {ranges.Length}";
+        SelectClip(selectedClip);
+    }
+
+    private void SelectClip(Guid? id, bool reveal = false)
+    {
+        selectedClip = id;
+        timeline.SetClips(ranges, id);
+        var index = Array.FindIndex(ranges, clip => clip.Id == id);
+        if (index < 0) return;
+        if (reveal) timeline.Reveal(ranges[index]);
+        if (clips.SelectedIndices.Count == 1 && clips.SelectedIndices[0] == index) return;
+        selectingClip = true;
+        clips.SelectedIndices.Clear();
+        clips.SelectedIndices.Add(index);
+        clips.EnsureVisible(index);
+        selectingClip = false;
+    }
+
+    private void ShowSection(int index)
+    {
+        for (var i = 0; i < sections.Length; i++)
+        {
+            sections[i].Visible = i == index;
+            Emphasize(sectionButtons[i], i == index);
+        }
     }
 
     private void ReplaceSources(string[] result)
@@ -391,7 +534,8 @@ internal sealed class MainWindow : Form
 
     private string FileState(string path)
     {
-        var related = store.Data.Jobs.Where(job => string.Equals(job.Source, path, StringComparison.OrdinalIgnoreCase));
+        var related = store.Data.Jobs.Where(job => string.Equals(job.Source, path, StringComparison.OrdinalIgnoreCase))
+            .GroupBy(job => job.ClipId ?? job.Id).Select(group => group.Last()).ToArray();
         if (related.Any(job => job.State is JobState.Waiting or JobState.Running)) return "导出中";
         if (related.Any(job => job.State == JobState.Failed)) return "有失败";
         if (related.Any(job => job.State == JobState.Done)) return "已保存";
@@ -412,8 +556,9 @@ internal sealed class MainWindow : Form
         jobs.Invalidate();
         files.Invalidate();
         var active = store.Data.Jobs.Count(job => job.State is JobState.Waiting or JobState.Running);
-        tabs.TabPages[1].Text = active == 0 ? "导出" : $"导出 ({active})";
+        sectionButtons[2].Text = active == 0 ? "导出" : $"导出  {active}";
         UpdateRetry();
+        RefreshClips();
     }
 
     private void UpdateRetry() => retry.Enabled = jobs.SelectedIndices.Count == 1
@@ -487,6 +632,7 @@ internal sealed class MainWindow : Form
         }
         closing = true;
         timer.Dispose();
+        preview?.Dispose();
         player?.Dispose();
         shutdown.Dispose();
     }
@@ -496,6 +642,7 @@ internal sealed class MainWindow : Form
         if (closing) return true;
         switch (keyData)
         {
+            case Keys.Escape when timeline.CancelGesture(): return true;
             case Keys.Space when player is { Ready: true }: player.TogglePause(); return true;
             case Keys.I: MarkStart(); return true;
             case Keys.O: MarkEnd(); return true;
@@ -518,16 +665,76 @@ internal sealed class MainWindow : Form
 
     private static Button Button(string label, Action? action = null)
     {
-        var button = new Button { Text = label, AutoSize = true };
+        var button = new Button
+        {
+            Text = label, AutoSize = true, FlatStyle = FlatStyle.Flat, Height = 29,
+            Padding = new Padding(8, 0, 8, 0), Margin = new Padding(1, 3, 5, 2),
+            Cursor = Cursors.Hand
+        };
+        button.FlatAppearance.BorderColor = EditorTheme.Border;
+        Emphasize(button, false);
         if (action is not null) button.Click += (_, _) => action();
         return button;
+    }
+
+    private static void Emphasize(Button button, bool selected)
+    {
+        button.BackColor = selected ? EditorTheme.Accent : EditorTheme.Raised;
+        button.ForeColor = selected ? EditorTheme.Background : EditorTheme.Text;
+        button.FlatAppearance.MouseOverBackColor = selected ? Color.FromArgb(145, 239, 222) : EditorTheme.Border;
+    }
+
+    private void DrawEmptyVideo(object? sender, PaintEventArgs e)
+    {
+        if (current is not null) return;
+        var center = video.ClientRectangle;
+        center.Height = Math.Max(0, center.Height - 24);
+        using var title = new Font("Segoe UI Semibold", 16);
+        const TextFormatFlags flags = TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter;
+        TextRenderer.DrawText(e.Graphics, "打开素材开始粗筛", title, center, EditorTheme.Text, flags);
+        center.Offset(0, 32);
+        TextRenderer.DrawText(e.Graphics, "在播放器里看原片，在下方时间轴挑出要保留的画面。", Font, center, EditorTheme.Muted, flags);
     }
 
     private static ListView CreateList(params (string Label, int Width)[] columns)
     {
         var list = new ListView { Dock = DockStyle.Fill, VirtualMode = true, View = View.Details,
-            FullRowSelect = true, MultiSelect = false, ShowItemToolTips = true, HideSelection = false };
+            FullRowSelect = true, MultiSelect = false, ShowItemToolTips = true, HideSelection = false,
+            BackColor = EditorTheme.Surface, ForeColor = EditorTheme.Text, BorderStyle = BorderStyle.None,
+            OwnerDraw = true };
         foreach (var column in columns) list.Columns.Add(column.Label, column.Width);
+        list.SizeChanged += (_, _) =>
+        {
+            var reserved = columns.Take(columns.Length - 1).Sum(column => column.Width);
+            list.Columns[^1].Width = Math.Max(columns[^1].Width, list.ClientSize.Width - reserved - 1);
+        };
+        list.DrawColumnHeader += (_, e) =>
+        {
+            using var fill = new SolidBrush(EditorTheme.Raised);
+            e.Graphics.FillRectangle(fill, e.Bounds);
+            DrawListText(e.Graphics, e.Header?.Text ?? "", list.Font, e.Bounds, EditorTheme.Muted);
+        };
+        list.DrawSubItem += (_, e) =>
+        {
+            using var fill = new SolidBrush(e.Item?.Selected == true ? EditorTheme.Border : EditorTheme.Surface);
+            e.Graphics.FillRectangle(fill, e.Bounds);
+            DrawListText(e.Graphics, e.SubItem?.Text ?? "", list.Font, e.Bounds, EditorTheme.Text);
+        };
         return list;
     }
+
+    private static void DrawListText(Graphics graphics, string text, Font font, Rectangle bounds, Color color) =>
+        TextRenderer.DrawText(graphics, text, font, Rectangle.Inflate(bounds, -8, 0), color,
+            TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+        var dark = 1;
+        DwmSetWindowAttribute(Handle, DWMWA_USE_IMMERSIVE_DARK_MODE, ref dark, sizeof(int));
+    }
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr window, int attribute, ref int value, int size);
 }

@@ -17,6 +17,7 @@ internal sealed record ExportJob(string Source, SourceStamp Stamp, string Folder
     double Start, double End, bool Exact)
 {
     public Guid Id { get; init; } = Guid.NewGuid();
+    public Guid? ClipId { get; init; }
     public JobState State { get; set; }
     public string? Output { get; set; }
     public string? Error { get; set; }
@@ -27,6 +28,12 @@ internal sealed class Session
     public string? Destination { get; set; }
     public List<ExportJob> Jobs { get; init; } = [];
     public Dictionary<string, SourceStamp> Skipped { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    public ExportJob[] LatestClips(string? source, SourceStamp? stamp) => Jobs
+        .Where(job => job.Stamp == stamp && string.Equals(job.Source, source, StringComparison.OrdinalIgnoreCase))
+        .GroupBy(job => job.ClipId ?? job.Id)
+        .Select(group => group.Last())
+        .ToArray();
 }
 
 internal sealed class SessionStore

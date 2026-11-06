@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
+using System.Reflection;
 using Viewcut;
 
 if (args.Length != 2)
@@ -93,7 +94,9 @@ var thread = new Thread(() =>
     var list = controls.OfType<ListView>().Single(list => list.Columns[0].Text == "素材");
     var markIn = controls.OfType<Button>().Single(button => button.Text == "I  起点");
     var markOut = controls.OfType<Button>().Single(button => button.Text == "O  保存片段");
+    var playPause = controls.OfType<Button>().Single(button => button.Text == "暂停");
     var previous = controls.OfType<Button>().Single(button => button.Text == "P  上一条");
+    var timeline = controls.OfType<ClipTimeline>().Single();
     var labels = controls.OfType<Label>().ToArray();
     Exception? uiError = null;
     app.Shown += async (_, _) =>
@@ -102,27 +105,94 @@ var thread = new Thread(() =>
         {
             await WaitForUi(() => list.VirtualListSize == 2 && labels.Any(label => label.Text.Contains("/ 00:00:09")));
             Assert(list.SelectedIndices.Count == 1, "File activation selects the source in the folder list");
-            markIn.PerformClick();
-            await WaitForUi(() => labels.Any(label => label.Text.Contains("已标记起点")));
+            playPause.PerformClick();
+            await WaitForUi(() => playPause.Text == "播放");
             var timeLabel = labels.Single(label => label.Text.Contains("/ 00:00:09"));
             TimeSpan CurrentTime() => TimeSpan.Parse(timeLabel.Text.Split(" / ")[0], CultureInfo.InvariantCulture);
-            var finish = CurrentTime().Add(TimeSpan.FromSeconds(0.4));
-            await WaitForUi(() => CurrentTime() > finish);
+
+            await JumpTo(0.5);
+            markIn.PerformClick();
+            await WaitForUi(() => labels.Any(label => label.Text.Contains("已标记起点")));
+            await JumpTo(1.5);
             markOut.PerformClick();
             await WaitForUi(() => uiStore.Data.Jobs.Count == 1);
+            await JumpTo(3.1);
+            markIn.PerformClick();
+            await JumpTo(4.0);
+            markOut.PerformClick();
+            await WaitForUi(() => uiStore.Data.Jobs.Count == 2 && uiStore.Data.Jobs.All(job => job.State == JobState.Done));
+            Assert(uiStore.Data.LatestClips(source, stamp).Length == 2, "Two clips appear as separate ranges");
+
+            var beforeHover = CurrentTime();
+            Mouse("Move", 2.45, Scale(12), MouseButtons.None);
+            await WaitForUi(() => PreviewMatches(2.45));
+            Assert(CurrentTime() == beforeHover, "Hover decodes its frame without moving the main playhead");
+
+            var original = uiStore.Data.Jobs[0];
+            Mouse("Down", original.Start, Scale(40), MouseButtons.Left);
+            Mouse("Move", 0.76, Scale(40), MouseButtons.Left);
+            await WaitForUi(() => PreviewMatches(0.76));
+            Assert(uiStore.Data.Jobs.Count == 2, "Dragging previews the new start before saving");
+            Mouse("Up", 0.76, Scale(40), MouseButtons.Left);
+            await WaitForUi(() => uiStore.Data.Jobs.Count == 3);
+            var adjusted = uiStore.Data.LatestClips(source, stamp)[0];
+            Assert(adjusted.ClipId == original.Id && Math.Abs(adjusted.Start - 0.76) < 0.05 && adjusted.End == original.End,
+                "Dragging the start handle updates only the start of the same clip");
+
+            Mouse("Down", adjusted.End, Scale(40), MouseButtons.Left);
+            Mouse("Move", 1.8, Scale(40), MouseButtons.Left);
+            await WaitForUi(() => PreviewMatches(1.8));
+            Mouse("Up", 1.8, Scale(40), MouseButtons.Left);
+            var revised = uiStore.Data.LatestClips(source, stamp)[0];
+            Assert(Math.Abs(revised.End - 1.8) < 0.05 && revised.Start == adjusted.Start,
+                "Dragging the end handle updates only the end of the same clip");
+            LeaveTimeline();
+            Assert(app.OwnedForms.OfType<FramePreview>().All(frame => !frame.Visible), "Preview closes when the pointer leaves");
+            Assert(File.Exists(original.Output), "Resizing keeps the earlier exported file");
+            using (var screenshot = new Bitmap(app.Width, app.Height))
+            {
+                app.DrawToBitmap(screenshot, new Rectangle(0, 0, app.Width, app.Height));
+                screenshot.Save(Path.Combine(directory, "editor.png"));
+            }
+
             previous.PerformClick();
-            await WaitForUi(() => app.Text.Contains("HEVC") && uiStore.Data.Jobs[0].State is JobState.Done or JobState.Failed);
-            Assert(uiStore.Data.Jobs[0].State == JobState.Done && File.Exists(uiStore.Data.Jobs[0].Output),
-                $"Main window marks and exports a clip while switching files ({uiStore.Data.Jobs[0].Error})");
+            await WaitForUi(() => app.Text.Contains("HEVC") && revised.State is JobState.Done or JobState.Failed);
+            Assert(revised.State == JobState.Done && File.Exists(revised.Output),
+                $"Main window exports an edited clip while switching files ({revised.Error})");
+            var latest = new SessionStore(Path.Combine(directory, "ui", "session.json")).Data.LatestClips(source, stamp);
+            Assert(latest.Length == 2 && latest[0].Id == revised.Id, "The timeline restores only the latest revision of each clip");
             app.ActivateInput(directory);
             await WaitForUi(() => list.VirtualListSize == 2 && app.Text.Contains("HEVC"));
             Console.WriteLine("PASS: Folder activation loads its supported videos");
+
+            async Task JumpTo(double seconds)
+            {
+                Mouse("Down", seconds, Scale(12), MouseButtons.Left);
+                Mouse("Up", seconds, Scale(12), MouseButtons.Left);
+                LeaveTimeline();
+                await WaitForUi(() => Math.Abs(CurrentTime().TotalSeconds - seconds) < 0.08);
+            }
         }
         catch (Exception ex) { uiError = ex; }
         finally { app.Close(); }
     };
     Application.Run(app);
     if (uiError is not null) throw new InvalidOperationException("Main window smoke test failed.", uiError);
+
+    int Scale(int size) => (int)Math.Round(size * timeline.DeviceDpi / 96d);
+
+    void Mouse(string action, double seconds, int y, MouseButtons buttons)
+    {
+        var x = Scale(12) + (int)Math.Round(seconds / 9 * (timeline.Width - Scale(24)));
+        typeof(Control).GetMethod("OnMouse" + action, BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(timeline, [new MouseEventArgs(buttons, 1, x, y, 0)]);
+    }
+
+    void LeaveTimeline() => typeof(Control).GetMethod("OnMouseLeave", BindingFlags.Instance | BindingFlags.NonPublic)!
+        .Invoke(timeline, [EventArgs.Empty]);
+
+    bool PreviewMatches(double seconds) => app.OwnedForms.OfType<FramePreview>()
+        .Any(frame => frame.Visible && frame.FramePosition is { } position && Math.Abs(position - seconds) < 0.08);
 
     async Task WaitForUi(Func<bool> done)
     {
