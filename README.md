@@ -1,10 +1,10 @@
-# Viewcut 0.3.2
+# Viewcut 0.4.0
 
 Viewcut 是 Windows 11 x64 上的本地视频粗筛工具。浏览相机或无人机的 MP4／MOV，标记要保留的片段，选完一条素材后一次导出到指定目录。
 
 ## 试用
 
-1. 运行 `artifacts\Setup\Viewcut-0.3.2-Setup-x64.exe`，选择安装位置和快捷方式，再从开始菜单打开 Viewcut。也可以直接运行 `artifacts\Viewcut\Viewcut.exe`。
+1. 运行 `artifacts\Setup\Viewcut-0.4.0-Setup-x64.exe`，选择安装位置和快捷方式，再从开始菜单打开 Viewcut。也可以直接运行 `artifacts\Viewcut\Viewcut.exe`。
 2. 在右侧「文件」浏览文件夹。可用地址栏、常用位置或磁盘入口导航，支持后退、前进、上一级、刷新和当前目录搜索。「大图标」与「列表」按钮可切换视图。双击文件夹进入，双击 MP4／MOV 后加载到播放器。外部右键视频仍可直接播放，右键文件夹则打开文件浏览器。
 3. 用空格键播放／暂停，左右方向键跳转三秒。按 `I` 标记起点，按 `O` 标记终点，按 `N`／`P` 查看下一条／上一条。标记会自动保存，选完后点击「导出当前素材全部片段」开始批量导出，每段生成一个文件。首次导出时可选择保存目录。
 4. 时间轴上的色块代表要保留的片段。悬停在时间轴上可查看对应画面，点击可移动播放头。点选色块后拖动左、右手柄，预览会跟随边界。滚轮缩放时间轴，按住 Shift 滚轮平移，「全览」恢复整条素材。
@@ -16,6 +16,31 @@ Viewcut 是 Windows 11 x64 上的本地视频粗筛工具。浏览相机或无�
 导出采用无损快切，起点可能提前到附近的关键帧。输出保留 MP4／MOV 容器及主视频、音频轨。标记、保存目录和任务记录位于 `%LOCALAPPDATA%\Viewcut\session.json`。旧版片段记录会自动恢复成可编辑标记。
 
 文件浏览器的大图标优先使用 Windows 已缓存的缩略图，没有缩略图时显示视频图标。
+
+## 侧栏文件管理
+
+文件页支持鼠标拖动框选、Ctrl 点选、Shift 连选、Ctrl+A 全选和反向选择，大图标与列表视图均可使用。右键选中文件会打开 Windows 原生文件菜单，包含系统关联的打开方式及已安装的文件扩展菜单；空白处或「…」按钮可打开常用操作菜单。
+
+| 操作 | 快捷键 |
+| --- | --- |
+| 复制／剪切／粘贴文件及文件夹 | Ctrl+C／Ctrl+X／Ctrl+V |
+| 复制文件完整路径 | Ctrl+Shift+C |
+| 删除到回收站 | Delete |
+| 永久删除，需再次确认 | Shift+Delete |
+| 原位重命名／多文件批量编号命名 | F2 |
+| 新建文件夹 | Ctrl+Shift+N |
+| 属性 | Alt+Enter |
+| 刷新 | F5 |
+| 地址／搜索 | Ctrl+L／Ctrl+F |
+| 后退／前进／上一级 | Alt+Left／Alt+Right／Alt+Up 或 Backspace |
+
+可与 Windows 资源管理器互相复制粘贴、拖入拖出文件，也可拖到侧栏显示的子文件夹。默认拖动遵循 Windows 的同盘移动、跨盘复制习惯，Ctrl 强制复制，Shift 强制移动。文件冲突、权限、进度和取消使用 Windows Shell 对话框；目录变化会自动刷新，用户主动切换目录优先于刷新。
+
+文件页的 Delete 操作针对磁盘文件；「片段」页和时间轴中的 Delete 只移除片段标记。SD 卡、网络位置等不支持回收站时，Windows 会在永久删除前提示。
+
+## 体积优化
+
+0.4.0 自带精简 FFmpeg 和 ffprobe，专用于 MP4／MOV 的无损复制剪切及关键帧检查。两个工具合计约 11 MB，之前约 201 MB；完整 libmpv 播放器保持不变，不影响视频查看和悬停预览。安装包仍自带 .NET Desktop Runtime，可离线安装运行。
 
 ## 资源管理器菜单
 
@@ -38,10 +63,12 @@ pwsh -NoProfile -File .\Register-Explorer.ps1
 
 ## 构建与测试
 
-使用 .NET 10 SDK，把 x64 媒体依赖放在 `.tools\mpv\libmpv-2.dll` 和 `.tools\ffmpeg\{ffmpeg,ffprobe}.exe`，运行 `pwsh -NoProfile -File .\Build.ps1`。SDK 可以安装在系统中，也可以放在 `.tools\dotnet`。
+使用 .NET 10 SDK，把 x64 播放依赖放在 `.tools\mpv\libmpv-2.dll`，精简媒体工具及许可证放在 `.tools\ffmpeg-lite\bin`，运行 `pwsh -NoProfile -File .\Build.ps1`。也可用 `-MediaTools` 指定另一套 FFmpeg 目录。SDK 可以安装在系统中，也可以放在 `.tools\dotnet`。
+
+精简媒体工具的官方源码版本、校验值、编译方法见 [media/README.md](media/README.md)，脚本为 `media/Build-FFmpegLite.sh`。请使用完整 FFmpeg 构建生成测试素材，并通过 `VIEWCUT_EXPORT_TOOLS` 指向精简工具验证导出；测试输出目录的 FFmpeg／ffprobe 同样使用精简版本，以覆盖 UI 导出路径。
 
 使用 Inno Setup 6.7 编译安装包，运行 `pwsh -NoProfile -File .\installer\Build-Setup.ps1`。也可通过 `-Iscc` 指定编译器路径。生成的安装包自带运行时和媒体依赖，安装时可离线使用。
 
 冒烟测试在 `tests\Viewcut.Smoke.csproj`。先构建测试项目，将三个媒体二进制文件复制到测试项目的输出目录，再运行 `Viewcut.Smoke.exe <媒体工具所在目录> <空的测试目录>`。测试会生成 H.264 MP4、HEVC MOV 样片，检查单击选择、双击播放、目录导航与搜索、两种查看方式、侧栏缩放、标记与批量导出、独立悬停预览、首尾拖动和旧版数据迁移。
 
-本地测试用的 libmpv 为 shinchiro 20261106（9028187538），FFmpeg 为 Gyan 9.0.2 essentials。对外发布时需按所选构建处理第三方依赖的许可证和源码分发要求。 [libmpv 测试构建](https://github.com/shinchiro/mpv-winbuild-cmake/releases/tag/20261106) · [FFmpeg 构建来源](https://www.gyan.dev/ffmpeg/builds/)
+本地使用的 libmpv 为 shinchiro 20261106（9028187538）。发布包的 FFmpeg 为官方 release/8.1 分支 a35157abb9 的精简编译；完整 Gyan 9.0.2 essentials 只用于测试素材生成和独立解码验证。对外发布时需按所选构建处理第三方依赖的许可证和源码分发要求。 [libmpv 测试构建](https://github.com/shinchiro/mpv-winbuild-cmake/releases/tag/20261106) · [FFmpeg 构建来源](https://www.gyan.dev/ffmpeg/builds/)

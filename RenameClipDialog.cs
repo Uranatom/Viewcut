@@ -6,13 +6,14 @@ internal sealed class RenameClipDialog : Form
         BackColor = EditorTheme.Raised, ForeColor = EditorTheme.Text };
     public string? ClipName { get; private set; }
 
-    public RenameClipDialog(string? current, Func<string?, string?> validate)
+    public RenameClipDialog(string? current, Func<string?, string?> validate, string title = "重命名片段",
+        string label = "片段名称", string hint = "名称将用于导出文件，扩展名自动保留。留空恢复默认名称。")
     {
         SuspendLayout();
         AutoScaleDimensions = new SizeF(96, 96);
         AutoScaleMode = AutoScaleMode.Dpi;
         Font = new Font("Segoe UI Variable Text", 9.5f);
-        Text = "重命名片段";
+        Text = title;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = MinimizeBox = false;
         ShowInTaskbar = false;
@@ -21,7 +22,7 @@ internal sealed class RenameClipDialog : Form
         ForeColor = EditorTheme.Text;
         ClientSize = new Size(450, 185);
         input.Text = current ?? "";
-        input.AccessibleName = "片段名称";
+        input.AccessibleName = label;
         var save = new FluentButton { Text = "确定", Emphasized = true };
         var cancel = new FluentButton { Text = "取消", DialogResult = DialogResult.Cancel };
         var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft,
@@ -33,9 +34,9 @@ internal sealed class RenameClipDialog : Form
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        layout.Controls.Add(new Label { Text = "片段名称", AutoSize = true, Margin = new Padding(0, 0, 0, 8) }, 0, 0);
+        layout.Controls.Add(new Label { Text = label, AutoSize = true, Margin = new Padding(0, 0, 0, 8) }, 0, 0);
         layout.Controls.Add(input, 0, 1);
-        layout.Controls.Add(new Label { Text = "名称将用于导出文件，扩展名自动保留。留空恢复默认名称。",
+        layout.Controls.Add(new Label { Text = hint,
             Dock = DockStyle.Fill, AutoSize = true, ForeColor = EditorTheme.Muted, Margin = new Padding(0, 8, 0, 8) }, 0, 2);
         layout.Controls.Add(actions, 0, 3);
         Controls.Add(layout);

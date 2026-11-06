@@ -726,6 +726,17 @@ internal sealed class MainWindow : Form
 
     private async void HandleClosing(object? sender, FormClosingEventArgs e)
     {
+        if (browser.FileOperationInProgress)
+        {
+            e.Cancel = true;
+            if (closing) return;
+            closing = true;
+            browser.Enabled = false;
+            SetStatus("正在等待文件操作结束；可在 Windows 文件操作窗口中取消。");
+            while (!IsDisposed && browser.FileOperationInProgress) await Task.Delay(80);
+            if (!IsDisposed) { closing = false; Close(); }
+            return;
+        }
         if (!closing && worker is { IsCompleted: false } pending)
         {
             closing = true;

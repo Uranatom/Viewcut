@@ -14,8 +14,9 @@ https://github.com/mpv-player/mpv/tree/902818753849d9ad8f0096fad6ca5aeaa37113b9
 FFmpeg and FFprobe
 https://ffmpeg.org/
 Test build and source information:
-https://www.gyan.dev/ffmpeg/builds/
-https://github.com/FFmpeg/FFmpeg/commit/946fcce07b
+https://github.com/FFmpeg/FFmpeg/tree/a35157abb96167fd7308edc92b55408d5bb084b0
+https://github.com/FFmpeg/FFmpeg/archive/a35157abb96167fd7308edc92b55408d5bb084b0.tar.gz
+Compact LGPL build configuration: Viewcut media/Build-FFmpegLite.sh
 See FFmpeg-LICENSE.txt.
 
 Inno Setup Simplified Chinese translation maintained by Zhenghan Yang

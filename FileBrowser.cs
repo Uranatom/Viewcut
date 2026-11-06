@@ -8,12 +8,13 @@ internal sealed record BrowserEntry(string Path, string Name, bool Directory, lo
     public bool Video => !Directory && System.IO.Path.GetExtension(Path).ToLowerInvariant() is ".mp4" or ".mov";
 }
 
-internal sealed class FileBrowser : UserControl
+internal sealed partial class FileBrowser : UserControl
 {
     private readonly TextBox address = new() { Dock = DockStyle.Fill, BorderStyle = BorderStyle.None };
     private readonly TextBox search = new() { Dock = DockStyle.Fill, BorderStyle = BorderStyle.None, PlaceholderText = "搜索当前文件夹" };
     private readonly ListView entries = new() { Dock = DockStyle.Fill, VirtualMode = true, OwnerDraw = true,
-        BorderStyle = BorderStyle.None, MultiSelect = false, HideSelection = false, ShowItemToolTips = true };
+        BorderStyle = BorderStyle.None, MultiSelect = true, HideSelection = false, ShowItemToolTips = true,
+        LabelEdit = true, AllowDrop = true };
     private readonly TreeView places = new() { Dock = DockStyle.Fill, BorderStyle = BorderStyle.None,
         ShowLines = false, ShowRootLines = false, FullRowSelect = true, HideSelection = false };
     private readonly Label info = new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true };
@@ -90,7 +91,7 @@ internal sealed class FileBrowser : UserControl
             AutoSizeMode = AutoSizeMode.GrowAndShrink, Margin = Padding.Empty };
         viewBar.Controls.AddRange([
             new Label { Text = "查看", AutoSize = true, ForeColor = EditorTheme.Muted, Margin = new Padding(3, 10, 8, 0) },
-            large, details
+            large, details, Icon("\uE712", "文件操作", () => ShowCommands())
         ]);
         var commandBar = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = Padding.Empty, AutoSize = true };
         commandBar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
@@ -138,9 +139,13 @@ internal sealed class FileBrowser : UserControl
         entries.ItemActivate += (_, _) => ActivateSelection();
         entries.SelectedIndexChanged += (_, _) =>
         {
-            if (entries.SelectedIndices.Count != 1) return;
-            selectedPath = visible[entries.SelectedIndices[0]].Path;
-            info.Text = $"{visible.Length} 个项目　|　{visible[entries.SelectedIndices[0]].Name}";
+            if (updatingEntries) return;
+            var selection = SelectedEntries;
+            selectedPath = selection.FirstOrDefault()?.Path;
+            info.Text = selection.Length == 0 ? $"{visible.Length} 个项目"
+                : selection.Length == 1 ? $"{visible.Length} 个项目　|　{selection[0].Name}"
+                : $"{visible.Length} 个项目　|　已选择 {selection.Length} 项";
+            entries.Invalidate();
         };
         entries.DrawItem += DrawEntry;
         entries.DrawSubItem += DrawDetails;
@@ -157,10 +162,7 @@ internal sealed class FileBrowser : UserControl
         };
         entries.SizeChanged += (_, _) => FitColumns();
         places.HandleCreated += (_, _) => SetWindowTheme(places.Handle, "DarkMode_Explorer", null);
-        entries.KeyDown += (_, e) =>
-        {
-            if (e.KeyCode == Keys.Back) { Up(); e.Handled = true; }
-        };
+        InitializeOperations();
         address.KeyDown += (_, e) =>
         {
             if (e.KeyCode != Keys.Enter) return;
@@ -175,12 +177,16 @@ internal sealed class FileBrowser : UserControl
     public async Task NavigateAsync(string? path, string? select = null, bool addHistory = true)
     {
         if (string.IsNullOrWhiteSpace(path) || IsDisposed) return;
+        refreshTimer.Stop();
+        navigating = true;
         var ticket = ++request;
         info.Text = "正在读取文件夹…";
         try
         {
             path = Path.GetFullPath(path);
             var target = path;
+            var selection = string.Equals(target, CurrentFolder, StringComparison.OrdinalIgnoreCase) && select is null
+                ? SelectedEntries.Select(entry => entry.Path).ToArray() : select is null ? [] : new[] { select };
             var result = await Task.Run(() => ReadFolder(target));
             if (ticket != request || IsDisposed) return;
             CurrentFolder = target;
@@ -192,10 +198,15 @@ internal sealed class FileBrowser : UserControl
             }
             address.Text = target;
             all = result;
+            updatingEntries = true;
+            entries.SelectedIndices.Clear();
             selectedPath = select;
             ClearThumbnails();
             if (search.TextLength > 0) search.Clear();
             else Filter();
+            RestoreSelection(selection);
+            updatingEntries = false;
+            WatchFolder(target);
             back.Enabled = historyIndex > 0;
             forward.Enabled = historyIndex < history.Count - 1;
             PreferencesChanged?.Invoke();
@@ -206,6 +217,7 @@ internal sealed class FileBrowser : UserControl
             address.Text = CurrentFolder ?? path;
             info.Text = $"无法打开文件夹　{ex.Message}";
         }
+        finally { if (ticket == request) navigating = false; }
     }
 
     private static BrowserEntry[] ReadFolder(string path)
@@ -223,12 +235,15 @@ internal sealed class FileBrowser : UserControl
 
     private void Filter()
     {
+        var wasUpdating = updatingEntries;
+        updatingEntries = true;
         entries.VirtualListSize = 0;
-        visible = all.Where(entry => entry.Name.Contains(search.Text, StringComparison.CurrentCultureIgnoreCase)).ToArray();
+        visible = SortEntries(all.Where(entry => entry.Name.Contains(search.Text, StringComparison.CurrentCultureIgnoreCase)));
         entries.VirtualListSize = visible.Length;
         FitColumns();
         SelectPath(selectedPath);
         info.Text = $"{visible.Length} 个项目";
+        updatingEntries = wasUpdating;
         entries.Invalidate();
     }
 
@@ -266,7 +281,7 @@ internal sealed class FileBrowser : UserControl
         var entry = visible[entries.SelectedIndices[0]];
         if (entry.Directory) _ = NavigateAsync(entry.Path);
         else if (entry.Video) VideoActivated?.Invoke(entry.Path);
-        else info.Text = "请选择 MP4 或 MOV 视频。";
+        else OpenExternal(entry.Path);
     }
 
     private void Up()
@@ -321,6 +336,7 @@ internal sealed class FileBrowser : UserControl
         if (!LargeIcons) return;
         var entry = visible[e.ItemIndex];
         var selected = e.Item?.Selected == true;
+        var cut = cutPaths.Contains(entry.Path);
         var playing = string.Equals(entry.Path, playingPath, StringComparison.OrdinalIgnoreCase);
         using var background = new SolidBrush(selected ? EditorTheme.Border : playing ? Color.FromArgb(35, 51, 65) : EditorTheme.Surface);
         var bounds = Rectangle.Inflate(e.Bounds, -Scale(3), -Scale(2));
@@ -334,6 +350,11 @@ internal sealed class FileBrowser : UserControl
             var size = new Size((int)(image.Width * ratio), (int)(image.Height * ratio));
             e.Graphics.DrawImage(image, new Rectangle(imageBounds.Left + (imageBounds.Width - size.Width) / 2,
                 imageBounds.Top + (imageBounds.Height - size.Height) / 2, size.Width, size.Height));
+            if (cut)
+            {
+                using var dim = new SolidBrush(Color.FromArgb(140, EditorTheme.Surface));
+                e.Graphics.FillRectangle(dim, imageBounds);
+            }
         }
         else
         {
@@ -345,7 +366,7 @@ internal sealed class FileBrowser : UserControl
         }
         var caption = new Rectangle(bounds.X + Scale(3), imageBounds.Bottom + Scale(3), bounds.Width - Scale(6),
             Math.Max(1, bounds.Bottom - imageBounds.Bottom - Scale(3)));
-        TextRenderer.DrawText(e.Graphics, entry.Name, Font, caption, playing ? EditorTheme.Accent : EditorTheme.Text,
+        TextRenderer.DrawText(e.Graphics, entry.Name, Font, caption, playing ? EditorTheme.Accent : cut ? EditorTheme.Muted : EditorTheme.Text,
             TextFormatFlags.HorizontalCenter | TextFormatFlags.WordBreak | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
         if (playing)
         {
@@ -372,7 +393,7 @@ internal sealed class FileBrowser : UserControl
             bounds.X += Scale(34);
             bounds.Width -= Scale(34);
         }
-        DrawText(e.Graphics, e.SubItem?.Text ?? "", bounds, playing ? EditorTheme.Accent : EditorTheme.Text);
+        DrawText(e.Graphics, e.SubItem?.Text ?? "", bounds, playing ? EditorTheme.Accent : cutPaths.Contains(entry.Path) ? EditorTheme.Muted : EditorTheme.Text);
         if (playing && e.ColumnIndex == 0)
         {
             using var accent = new SolidBrush(EditorTheme.Accent);
@@ -485,6 +506,9 @@ internal sealed class FileBrowser : UserControl
         if (disposing)
         {
             request++;
+            watcher?.Dispose();
+            refreshTimer.Dispose();
+            commandMenu.Dispose();
             ClearThumbnails();
             tips.Dispose();
             tileSize.Dispose();

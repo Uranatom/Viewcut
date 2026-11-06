@@ -3,9 +3,21 @@ using System.Globalization;
 using System.Reflection;
 using Viewcut;
 
+AppDomain.CurrentDomain.UnhandledException += (_, error) =>
+{
+    Console.Error.WriteLine(error.ExceptionObject);
+    Environment.Exit(1);
+};
+
 if (args.Length == 2 && args[0] == "--layout")
 {
     LayoutRegression.Run(Path.GetFullPath(args[1]));
+    return;
+}
+
+if (args.Length == 2 && args[0] == "--browser")
+{
+    BrowserRegression.RunStandalone(Path.GetFullPath(args[1]));
     return;
 }
 
@@ -28,7 +40,8 @@ await Run(ffmpeg, "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=3840x
     "-t", "4", "-c:v", "libx265", "-preset", "ultrafast", "-x265-params", "pools=4:frame-threads=2:log-level=error", "-an", second);
 
 var stamp = SourceStamp.Read(source);
-var exporter = new Exporter(tools);
+var exportTools = Environment.GetEnvironmentVariable("VIEWCUT_EXPORT_TOOLS") ?? tools;
+var exporter = new Exporter(exportTools);
 var fast = new ExportJob(source, stamp, output, 1.8, 4.2);
 var firstOutput = await exporter.ExportAsync(fast, CancellationToken.None);
 var secondOutput = await exporter.ExportAsync(fast, CancellationToken.None);
@@ -359,6 +372,9 @@ var thread = new Thread(() =>
             deleteList.ContextMenuStrip.Items[1].PerformClick();
             deleteList.ContextMenuStrip.Close();
             Assert(uiStore.Data.LatestClips(source, stamp).Length == 0, "Sidebar menu removes the selected saved clip");
+
+            controls.OfType<Button>().Single(button => button.Text == "文件").PerformClick();
+            await BrowserRegression.Run(app, browser, directory);
 
             void ActivateEntry() => typeof(ListView).GetMethod("OnItemActivate", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(list, [EventArgs.Empty]);
