@@ -31,11 +31,15 @@ internal sealed class ClipTimeline : Control
     private int dragOrigin;
     private readonly ContextMenuStrip clipMenu = EditorTheme.ContextMenu();
     private Guid renameTarget;
+    private HashSet<Guid> selectedIds = [];
 
     public Guid? Selection { get; private set; }
-    public event Action<Guid>? ClipSelected;
+    public IReadOnlySet<Guid> SelectedIds => selectedIds;
+    public event Action<Guid, bool>? ClipSelected;
     public event Action<ClipRange>? ClipAdjusted;
     public event Action<Guid>? RenameRequested;
+    public event Action? DeleteRequested;
+    public event Action? SelectionCleared;
     public event Action<double>? SeekRequested;
     public event Action<double?, Point>? PreviewRequested;
 
@@ -45,13 +49,14 @@ internal sealed class ClipTimeline : Control
         BackColor = EditorTheme.Surface;
         ForeColor = EditorTheme.Text;
         AccessibleName = "片段时间轴";
-        AccessibleDescription = "点击定位，悬停预览。选中片段后拖动左右手柄。滚轮缩放，Shift 加滚轮平移。";
+        AccessibleDescription = "点击定位，悬停预览。选中片段后拖动左右手柄。Ctrl 点击多选，Delete 或 Backspace 删除片段。滚轮缩放，Shift 加滚轮平移。";
         TabStop = true;
         AutoSize = true;
         MinimumSize = new Size(120, 106);
         SetStyle(ControlStyles.Selectable | ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint
             | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
         clipMenu.Items.Add("重命名", null, (_, _) => RenameRequested?.Invoke(renameTarget));
+        clipMenu.Items.Add("删除", null, (_, _) => DeleteRequested?.Invoke());
     }
 
     public void SetMedia(double value)
@@ -75,6 +80,14 @@ internal sealed class ClipTimeline : Control
     {
         clips = ranges;
         Selection = selected;
+        selectedIds = selected is { } id ? [id] : [];
+        Invalidate();
+    }
+
+    public void SetSelection(IEnumerable<Guid> selected, Guid? primary)
+    {
+        selectedIds = selected.ToHashSet();
+        Selection = primary;
         Invalidate();
     }
 
@@ -121,9 +134,11 @@ internal sealed class ClipTimeline : Control
         base.OnMouseDown(e);
         if (e.Button == MouseButtons.Right && HitClip(e.Location, out _) is { } target)
         {
-            Selection = target.Id;
-            ClipSelected?.Invoke(target.Id);
+            Focus();
+            if (!selectedIds.Contains(target.Id)) ClipSelected?.Invoke(target.Id, false);
             renameTarget = target.Id;
+            clipMenu.Items[0].Enabled = selectedIds.Count == 1;
+            clipMenu.Items[1].Text = selectedIds.Count > 1 ? "删除选中片段" : "删除";
             clipMenu.Show(this, e.Location);
             return;
         }
@@ -132,9 +147,11 @@ internal sealed class ClipTimeline : Control
         var clip = HitClip(e.Location, out var edge);
         if (clip is not null)
         {
-            Selection = clip.Id;
-            ClipSelected?.Invoke(clip.Id);
+            var toggle = (ModifierKeys & Keys.Control) != 0;
+            ClipSelected?.Invoke(clip.Id, toggle);
+            if (toggle) return;
         }
+        else SelectionCleared?.Invoke();
 
         if (clip is not null && edge is { } leading)
         {
@@ -274,10 +291,10 @@ internal sealed class ClipTimeline : Control
         DrawRuler(g, line, track);
         var state = g.Save();
         g.SetClip(Rectangle.Inflate(track, 0, -1));
-        foreach (var clip in clips.Where(range => range.Id != Selection))
+        foreach (var clip in clips.Where(range => !selectedIds.Contains(range.Id)))
             DrawClip(g, clip, false);
-        if (clips.FirstOrDefault(range => range.Id == Selection) is { } selected)
-            DrawClip(g, edit ?? selected, true);
+        foreach (var selected in clips.Where(range => selectedIds.Contains(range.Id)))
+            DrawClip(g, edit?.Id == selected.Id ? edit : selected, true);
         g.Restore(state);
 
         if (mark is { } value) DrawPointer(g, value, EditorTheme.Marker, track.Bottom, false);

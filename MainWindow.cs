@@ -36,6 +36,7 @@ internal sealed class MainWindow : Form
     private ClipDraft[] clipDrafts = [];
     private ClipRange[] ranges = [];
     private Guid? selectedClip;
+    private readonly HashSet<Guid> selectedClips = [];
     private double? start;
     private double mediaDuration;
     private bool selectingClip;
@@ -248,20 +249,41 @@ internal sealed class MainWindow : Form
         };
         clips.SelectedIndexChanged += (_, _) =>
         {
-            if (!selectingClip && clips.SelectedIndices.Count == 1)
-                SelectClip(ranges[clips.SelectedIndices[0]].Id, reveal: true);
+            if (selectingClip) return;
+            selectedClips.Clear();
+            foreach (int index in clips.SelectedIndices) selectedClips.Add(ranges[index].Id);
+            selectedClip = ranges.FirstOrDefault(range => selectedClips.Contains(range.Id))?.Id;
+            timeline.SetSelection(selectedClips, selectedClip);
+            if (selectedClip is { } id) timeline.Reveal(ranges.First(range => range.Id == id));
         };
         clips.DoubleClick += (_, _) =>
         {
             if (clips.SelectedIndices.Count == 1) player?.Seek(ranges[clips.SelectedIndices[0]].Start, true);
         };
-        timeline.ClipSelected += id =>
+        clips.MultiSelect = true;
+        var clipContext = EditorTheme.ContextMenu();
+        clipContext.Items.Add("重命名", null, (_, _) =>
         {
-            SelectClip(id);
+            if (selectedClips.Count == 1) RenameClip(selectedClips.Single());
+        });
+        clipContext.Items.Add("删除", null, (_, _) => DeleteSelectedClips());
+        clipContext.Opening += (_, e) =>
+        {
+            e.Cancel = selectedClips.Count == 0;
+            clipContext.Items[0].Enabled = selectedClips.Count == 1;
+            clipContext.Items[1].Text = selectedClips.Count > 1 ? "删除选中片段" : "删除";
+        };
+        clips.ContextMenuStrip = clipContext;
+        clips.Disposed += (_, _) => clipContext.Dispose();
+        timeline.ClipSelected += (id, toggle) =>
+        {
+            SelectClip(id, toggle: toggle);
             ShowSection(1);
         };
+        timeline.SelectionCleared += () => SelectClip(null);
         timeline.ClipAdjusted += AdjustClip;
         timeline.RenameRequested += RenameClip;
+        timeline.DeleteRequested += DeleteSelectedClips;
         timeline.SeekRequested += seconds => player?.Seek(seconds, true);
         timeline.PreviewRequested += PreviewAt;
         Deactivate += (_, _) => timeline.CancelGesture();
@@ -325,6 +347,7 @@ internal sealed class MainWindow : Form
             sourceStamp = stamp;
             start = null;
             selectedClip = null;
+            selectedClips.Clear();
             mediaDuration = 0;
             timeline.SetMedia(0);
             RefreshClips();
@@ -378,6 +401,8 @@ internal sealed class MainWindow : Form
         }
         start = null;
         selectedClip = clip.Id;
+        selectedClips.Clear();
+        selectedClips.Add(clip.Id);
         SetStatus($"已标记片段 {Clock(from)}–{Clock(end)}，选完后点击导出。");
         RefreshClips();
     }
@@ -572,24 +597,56 @@ internal sealed class MainWindow : Form
         clips.VirtualListSize = ranges.Length;
         selectingClip = false;
         sectionButtons[1].Text = ranges.Length == 0 ? "片段" : $"片段  {ranges.Length}";
-        SelectClip(selectedClip);
+        selectedClips.IntersectWith(ranges.Select(range => range.Id));
+        if (selectedClip is { } id && !selectedClips.Contains(id))
+            selectedClip = selectedClips.Count > 0 ? selectedClips.First() : null;
+        SyncClipSelection();
         exportAll.Enabled = clipDrafts.Any(clip => store.Data.CanQueue(clip, store.Data.Destination));
         exportAll.Text = ranges.Length == 0 ? "导出当前素材全部片段" : $"导出当前素材全部片段 ({ranges.Length})";
     }
 
-    private void SelectClip(Guid? id, bool reveal = false)
+    private void SelectClip(Guid? id, bool reveal = false, bool toggle = false)
     {
-        selectedClip = id;
-        timeline.SetClips(ranges, id);
-        var index = Array.FindIndex(ranges, clip => clip.Id == id);
-        if (index < 0) return;
-        if (reveal) timeline.Reveal(ranges[index]);
-        if (clips.SelectedIndices.Count == 1 && clips.SelectedIndices[0] == index) return;
+        if (!toggle) selectedClips.Clear();
+        if (id is { } value && (!toggle || !selectedClips.Remove(value))) selectedClips.Add(value);
+        selectedClip = id is { } currentId && selectedClips.Contains(currentId) ? currentId
+            : selectedClips.Count > 0 ? selectedClips.First() : null;
+        SyncClipSelection();
+        if (reveal && selectedClip is { } primary) timeline.Reveal(ranges.First(range => range.Id == primary));
+    }
+
+    private void SyncClipSelection()
+    {
+        timeline.SetClips(ranges, selectedClip);
+        timeline.SetSelection(selectedClips, selectedClip);
         selectingClip = true;
         clips.SelectedIndices.Clear();
-        clips.SelectedIndices.Add(index);
-        clips.EnsureVisible(index);
+        for (var index = 0; index < ranges.Length; index++)
+            if (selectedClips.Contains(ranges[index].Id)) clips.SelectedIndices.Add(index);
         selectingClip = false;
+        var primaryIndex = Array.FindIndex(ranges, range => range.Id == selectedClip);
+        if (primaryIndex >= 0) clips.EnsureVisible(primaryIndex);
+    }
+
+    private void DeleteSelectedClips()
+    {
+        if (closing || selectedClips.Count == 0) return;
+        var ids = clipDrafts.Where(clip => selectedClips.Contains(clip.Id)).Select(clip => clip.Id).ToHashSet();
+        if (ids.Count == 0) return;
+        var before = store.Data.Clips.ToArray();
+        store.Data.Clips.RemoveAll(clip => ids.Contains(clip.Id));
+        if (!Save())
+        {
+            store.Data.Clips.Clear();
+            store.Data.Clips.AddRange(before);
+            return;
+        }
+        timeline.CancelGesture();
+        preview?.Hide();
+        selectedClip = null;
+        selectedClips.Clear();
+        RefreshClips();
+        SetStatus($"已删除 {ids.Count} 个片段标记。");
     }
 
     private void ShowSection(int index)
@@ -696,6 +753,9 @@ internal sealed class MainWindow : Form
         if (browser.ContainsFocus) return base.ProcessCmdKey(ref msg, keyData);
         switch (keyData)
         {
+            case Keys.Delete or Keys.Back when timeline.ContainsFocus || clips.ContainsFocus:
+                DeleteSelectedClips();
+                return true;
             case Keys.Escape when timeline.CancelGesture(): return true;
             case Keys.Space when player is { Ready: true }: player.TogglePause(); return true;
             case Keys.I: MarkStart(); return true;

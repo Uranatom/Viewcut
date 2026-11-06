@@ -291,6 +291,75 @@ var thread = new Thread(() =>
             uiStore.Data.Clips[0] = revised with { Start = revised.Start + 0.1 };
             Assert(batch[0].Start == frozenStart, "Editing a draft cannot mutate an already queued batch");
 
+            var anotherSource = new ClipDraft(second, SourceStamp.Read(second), 0.5, 1.5);
+            uiStore.Data.Clips.Add(anotherSource);
+            app.ActivateInput(source);
+            await WaitForUi(() => labels.Any(label => label.Text.Contains("/ 00:00:09")));
+            var selectedRanges = uiStore.Data.LatestClips(source, stamp);
+            var selectClip = typeof(MainWindow).GetMethod("SelectClip", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            selectClip.Invoke(app, [selectedRanges[0].Id, false, false]);
+            selectClip.Invoke(app, [selectedRanges[1].Id, false, true]);
+            Assert(timeline.SelectedIds.Count == 2, "Ctrl selection adds another timeline clip");
+            selectClip.Invoke(app, [selectedRanges[1].Id, false, true]);
+            Assert(timeline.SelectedIds.SetEquals([selectedRanges[0].Id]), "Ctrl selection toggles a selected clip off");
+            selectClip.Invoke(app, [selectedRanges[1].Id, false, true]);
+            Mouse("Down", (selectedRanges[0].Start + selectedRanges[0].End) / 2, Scale(40), MouseButtons.Right);
+            Assert(menu.Items[1].Text == "删除选中片段" && !menu.Items[0].Enabled && timeline.SelectedIds.Count == 2,
+                "Right click preserves multiple selection and offers batch deletion");
+            menu.Items[1].PerformClick();
+            menu.Close();
+            Assert(uiStore.Data.LatestClips(source, stamp).Length == 0 && timeline.SelectedIds.Count == 0,
+                "Batch deletion clears the markers and timeline selection");
+            Assert(uiStore.Data.Clips.Single().Id == anotherSource.Id, "Deletion is limited to the loaded source");
+            Assert(uiStore.Data.Jobs.SequenceEqual(batch) && batch.All(job => File.Exists(job.Output)),
+                "Deletion keeps export history and exported files");
+            Assert(new SessionStore(Path.Combine(directory, "ui", "session.json")).Data.LatestClips(source, stamp).Length == 0,
+                "Deleted markers stay deleted after restoring the session");
+
+            var deleteList = controls.OfType<ListView>().Single(control => control.Columns[0].Text == "片段");
+            foreach (var key in new[] { Keys.Delete, Keys.Back })
+            {
+                var a = new ClipDraft(source, stamp, 0.6, 1.2);
+                var b = new ClipDraft(source, stamp, 3.2, 3.8);
+                uiStore.Data.Clips.AddRange([a, b]);
+                typeof(MainWindow).GetMethod("RefreshClips", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(app, null);
+                if (key == Keys.Delete)
+                {
+                    selectClip.Invoke(app, [a.Id, false, false]);
+                    timeline.Focus();
+                }
+                else
+                {
+                    deleteList.SelectedIndices.Add(0);
+                    deleteList.SelectedIndices.Add(1);
+                    deleteList.Focus();
+                    Assert(timeline.SelectedIds.Count == 2, "Clip list multi-selection synchronizes to the timeline");
+                }
+                var message = Message.Create(app.Handle, 0x0100, (IntPtr)key, IntPtr.Zero);
+                var handled = typeof(MainWindow).GetMethod("ProcessCmdKey", BindingFlags.Instance | BindingFlags.NonPublic)!
+                    .Invoke(app, [message, key]);
+                Assert(handled is true && uiStore.Data.LatestClips(source, stamp).Length == (key == Keys.Delete ? 1 : 0),
+                    $"{key} deletes the focused clip selection");
+                if (key == Keys.Delete)
+                {
+                    Mouse("Down", (b.Start + b.End) / 2, Scale(40), MouseButtons.Right);
+                    Assert(menu.Items[1].Text == "删除", "Single clip menu offers deletion");
+                    menu.Items[1].PerformClick();
+                    menu.Close();
+                }
+            }
+
+            var listClip = new ClipDraft(source, stamp, 5.1, 5.8);
+            uiStore.Data.Clips.Add(listClip);
+            typeof(MainWindow).GetMethod("RefreshClips", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(app, null);
+            deleteList.SelectedIndices.Add(0);
+            deleteList.ContextMenuStrip!.Show(deleteList, new Point(8, 8));
+            Assert(deleteList.ContextMenuStrip.Items[0].Enabled && deleteList.ContextMenuStrip.Items[1].Text == "删除",
+                "Sidebar clip menu offers rename and delete for a single selection");
+            deleteList.ContextMenuStrip.Items[1].PerformClick();
+            deleteList.ContextMenuStrip.Close();
+            Assert(uiStore.Data.LatestClips(source, stamp).Length == 0, "Sidebar menu removes the selected saved clip");
+
             void ActivateEntry() => typeof(ListView).GetMethod("OnItemActivate", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(list, [EventArgs.Empty]);
 
