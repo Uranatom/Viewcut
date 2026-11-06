@@ -21,6 +21,13 @@ internal sealed class Exporter(string toolsDirectory)
         var extension = Path.GetExtension(job.Source).ToLowerInvariant();
         if (extension is not (".mp4" or ".mov"))
             throw new InvalidDataException("首版支持导出 MP4 和 MOV。");
+        if (job.Name is { } customName)
+        {
+            if (ClipNames.Validate(customName, job.Id, [], null, extension) is { } error)
+                throw new InvalidDataException(error);
+            var output = Path.Combine(job.Folder, customName + extension);
+            if (ClipNames.OutputExists(output)) throw new ClipNameConflictException(output);
+        }
 
         var staging = Path.Combine(job.Folder, $".viewcut-{job.Id:N}.partial{extension}");
         var arguments = new List<string>
@@ -60,6 +67,13 @@ internal sealed class Exporter(string toolsDirectory)
 
     private static string Publish(ExportJob job, string staging, string extension)
     {
+        if (job.Name is { } customName)
+        {
+            var output = Path.Combine(job.Folder, customName + extension);
+            try { File.Move(staging, output); }
+            catch (IOException) when (ClipNames.OutputExists(output)) { throw new ClipNameConflictException(output); }
+            return output;
+        }
         var stem = Path.GetFileNameWithoutExtension(job.Source);
         if (stem.Length > 120) stem = stem[..120];
         var timestamp = TimeSpan.FromSeconds(job.Start).ToString(@"hh\mm\ss\.fff", CultureInfo.InvariantCulture);
@@ -73,7 +87,7 @@ internal sealed class Exporter(string toolsDirectory)
                 File.Move(staging, output);
                 return output;
             }
-            catch (IOException) when (File.Exists(output)) { }
+            catch (IOException) when (ClipNames.OutputExists(output)) { }
         }
     }
 

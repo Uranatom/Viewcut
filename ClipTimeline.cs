@@ -3,7 +3,10 @@ using System.Globalization;
 
 namespace Viewcut;
 
-internal sealed record ClipRange(Guid Id, int Number, double Start, double End);
+internal sealed record ClipRange(Guid Id, int Number, double Start, double End, string? Name = null)
+{
+    public string DisplayName => string.IsNullOrWhiteSpace(Name) ? $"片段 {Number}" : Name;
+}
 
 internal sealed class ClipTimeline : Control
 {
@@ -26,10 +29,13 @@ internal sealed class ClipTimeline : Control
     private bool startHandle;
     private bool scrubbing;
     private int dragOrigin;
+    private readonly ContextMenuStrip clipMenu = EditorTheme.ContextMenu();
+    private Guid renameTarget;
 
     public Guid? Selection { get; private set; }
     public event Action<Guid>? ClipSelected;
     public event Action<ClipRange>? ClipAdjusted;
+    public event Action<Guid>? RenameRequested;
     public event Action<double>? SeekRequested;
     public event Action<double?, Point>? PreviewRequested;
 
@@ -41,8 +47,11 @@ internal sealed class ClipTimeline : Control
         AccessibleName = "片段时间轴";
         AccessibleDescription = "点击定位，悬停预览。选中片段后拖动左右手柄。滚轮缩放，Shift 加滚轮平移。";
         TabStop = true;
+        AutoSize = true;
+        MinimumSize = new Size(120, 106);
         SetStyle(ControlStyles.Selectable | ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint
             | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+        clipMenu.Items.Add("重命名", null, (_, _) => RenameRequested?.Invoke(renameTarget));
     }
 
     public void SetMedia(double value)
@@ -110,6 +119,14 @@ internal sealed class ClipTimeline : Control
     protected override void OnMouseDown(MouseEventArgs e)
     {
         base.OnMouseDown(e);
+        if (e.Button == MouseButtons.Right && HitClip(e.Location, out _) is { } target)
+        {
+            Selection = target.Id;
+            ClipSelected?.Invoke(target.Id);
+            renameTarget = target.Id;
+            clipMenu.Show(this, e.Location);
+            return;
+        }
         if (e.Button != MouseButtons.Left || duration <= 0) return;
         Focus();
         var clip = HitClip(e.Location, out var edge);
@@ -314,7 +331,7 @@ internal sealed class ClipTimeline : Control
         g.FillRectangle(fill, rect);
         g.DrawRectangle(border, rect.X, rect.Y, rect.Width, rect.Height);
         if (rect.Width > Scale(35))
-            DrawText(g, $"片段 {clip.Number}", Rectangle.Round(RectangleF.Inflate(rect, -Scale(9), 0)),
+            DrawText(g, clip.DisplayName, Rectangle.Round(RectangleF.Inflate(rect, -Scale(9), 0)),
                 selected ? EditorTheme.Background : EditorTheme.Text,
                 TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
         if (!selected) return;
@@ -341,6 +358,9 @@ internal sealed class ClipTimeline : Control
     private void DrawText(Graphics g, string text, Rectangle bounds, Color color, TextFormatFlags flags) =>
         TextRenderer.DrawText(g, text, Font, bounds, color, flags | TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix);
 
+    public override Size GetPreferredSize(Size proposedSize) => new(
+        MinimumSize.Width, Math.Max(MinimumSize.Height, RulerHeight + Font.Height + Scale(44)));
+
     protected override void OnGotFocus(EventArgs e)
     {
         base.OnGotFocus(e);
@@ -353,8 +373,16 @@ internal sealed class ClipTimeline : Control
         Invalidate();
     }
 
-    private Rectangle Track => new(Scale(12), Scale(25), Math.Max(1, Width - Scale(24)), Math.Max(Scale(12), Height - Scale(47)));
+    private int RulerHeight => Math.Max(Scale(28), Font.Height + Scale(12));
+    private Rectangle Track => new(Scale(12), RulerHeight, Math.Max(1, Width - Scale(24)),
+        Math.Max(Scale(32), Height - RulerHeight - Scale(25)));
     private double X(double seconds) => Track.Left + (viewLength > 0 ? (seconds - viewStart) * Track.Width / viewLength : 0);
     private double At(double x) => Math.Clamp(viewStart + (x - Track.Left) * viewLength / Track.Width, 0, duration);
     private int Scale(int size) => (int)Math.Round(size * DeviceDpi / 96d);
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) clipMenu.Dispose();
+        base.Dispose(disposing);
+    }
 }

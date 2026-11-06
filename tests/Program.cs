@@ -3,6 +3,12 @@ using System.Globalization;
 using System.Reflection;
 using Viewcut;
 
+if (args.Length == 2 && args[0] == "--layout")
+{
+    LayoutRegression.Run(Path.GetFullPath(args[1]));
+    return;
+}
+
 if (args.Length != 2)
     throw new ArgumentException("Expected a tool directory and an empty test directory.");
 
@@ -27,6 +33,18 @@ var fast = new ExportJob(source, stamp, output, 1.8, 4.2);
 var firstOutput = await exporter.ExportAsync(fast, CancellationToken.None);
 var secondOutput = await exporter.ExportAsync(fast, CancellationToken.None);
 Assert(firstOutput != secondOutput, "Repeated names get a suffix");
+var named = fast with { Name = "相机 日落", Id = Guid.NewGuid() };
+var namedOutput = await exporter.ExportAsync(named, CancellationToken.None);
+Assert(Path.GetFileName(namedOutput) == "相机 日落.mp4", "Export uses the custom name verbatim");
+try
+{
+    await exporter.ExportAsync(named, CancellationToken.None);
+    throw new InvalidOperationException("Expected a custom name collision.");
+}
+catch (ClipNameConflictException)
+{
+    Assert(File.Exists(namedOutput), "A duplicate name leaves the existing output intact");
+}
 foreach (var clip in new[] { firstOutput, secondOutput })
     await Run(ffmpeg, "-v", "error", "-xerror", "-i", clip, "-f", "null", "-");
 var fastLength = await Duration(firstOutput);
@@ -125,6 +143,7 @@ var thread = new Thread(() =>
             Assert(app.Text == "Viewcut", "Selecting a video once does not load it");
             ActivateEntry();
             await WaitForUi(() => app.Text.Contains("相机 素材.mp4") && labels.Any(label => label.Text.Contains("/ 00:00:09")));
+            Assert(labels.Any(label => label.Text == "正在处理\n" + Path.GetFileName(source)), "Sidebar identifies the active video");
             Console.WriteLine("PASS: Double-click file activation loads the selected video");
             Assert(!controls.OfType<Button>().Any(button => button.Text is "打开视频" or "打开文件夹" or "X  跳过")
                 && !controls.OfType<CheckBox>().Any(), "Removed toolbar actions and export mode are absent");
@@ -153,7 +172,7 @@ var thread = new Thread(() =>
             await browser.NavigateAsync(directory, source);
             Console.WriteLine("PASS: Browser back and forward navigation");
 
-            var divider = controls.OfType<SidebarDivider>().Single();
+            var divider = controls.OfType<SidebarDivider>().Single(control => control.AccessibleName == "调整侧边栏宽度");
             var columns = (TableLayoutPanel)divider.Parent!;
             var oldFraction = columns.ColumnStyles[2].Width;
             typeof(Control).GetMethod("OnMouseDown", BindingFlags.Instance | BindingFlags.NonPublic)!
@@ -163,6 +182,15 @@ var thread = new Thread(() =>
             typeof(Control).GetMethod("OnMouseUp", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(divider, [new MouseEventArgs(MouseButtons.Left, 1, 2, 25, 0)]);
             Assert(columns.ColumnStyles[2].Width > oldFraction, "Dragging the sidebar divider changes the width");
+            var timelineDivider = controls.OfType<SidebarDivider>().Single(control => control.AccessibleName == "调整时间轴高度");
+            var oldHeight = timeline.Height;
+            typeof(Control).GetMethod("OnMouseDown", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(timelineDivider, [new MouseEventArgs(MouseButtons.Left, 1, 25, 2, 0)]);
+            typeof(Control).GetMethod("OnMouseMove", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(timelineDivider, [new MouseEventArgs(MouseButtons.Left, 1, 25, -55, 0)]);
+            typeof(Control).GetMethod("OnMouseUp", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(timelineDivider, [new MouseEventArgs(MouseButtons.Left, 1, 25, 2, 0)]);
+            Assert(timeline.Height > oldHeight && uiStore.Data.TimelineFraction > 0.24, "Dragging the timeline divider changes and saves its height");
 
             playPause.PerformClick();
             await WaitForUi(() => playPause.Text == "播放");
@@ -210,6 +238,28 @@ var thread = new Thread(() =>
             LeaveTimeline();
             Assert(app.OwnedForms.OfType<FramePreview>().All(frame => !frame.Visible), "Preview closes when the pointer leaves");
             Assert(uiStore.Data.Jobs.Count == 0, "Adjusting both handles only changes saved draft ranges");
+            var other = uiStore.Data.LatestClips(source, stamp)[1];
+            Assert(ClipNames.Validate("SUNSET", other.Id, [revised with { Name = "Sunset" }], null, ".mp4") is not null,
+                "Duplicate draft names are rejected without regard to case");
+            Mouse("Down", (revised.Start + revised.End) / 2, Scale(40), MouseButtons.Right);
+            var menu = (ContextMenuStrip)typeof(ClipTimeline).GetField("clipMenu", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .GetValue(timeline)!;
+            Assert(menu.Visible && menu.Items[0].Text == "重命名", "Right clicking a clip opens its rename menu");
+            using (var fillDialog = new System.Windows.Forms.Timer { Interval = 30 })
+            {
+                fillDialog.Tick += (_, _) =>
+                {
+                    if (Application.OpenForms.OfType<RenameClipDialog>().FirstOrDefault() is not { } dialog) return;
+                    fillDialog.Stop();
+                    Descendants(dialog).OfType<TextBox>().Single().Text = "日落 片段";
+                    Descendants(dialog).OfType<Button>().Single(button => button.Text == "确定").PerformClick();
+                };
+                fillDialog.Start();
+                menu.Items[0].PerformClick();
+                menu.Close();
+            }
+            revised = uiStore.Data.LatestClips(source, stamp)[0];
+            Assert(revised.Name == "日落 片段", "Rename dialog persists the custom name");
             using (var screenshot = new Bitmap(app.Width, app.Height))
             {
                 app.DrawToBitmap(screenshot, new Rectangle(0, 0, app.Width, app.Height));
@@ -228,6 +278,7 @@ var thread = new Thread(() =>
             previous.PerformClick();
             await WaitForUi(() => app.Text.Contains("HEVC") && batch.All(job => job.State is JobState.Done or JobState.Failed));
             Assert(batch.All(job => job.State == JobState.Done && File.Exists(job.Output)), "Batch export completes while switching files");
+            Assert(Path.GetFileName(batch[0].Output) == "日落 片段.mp4" && batch[1].Name is null, "Named and default files export in the same batch");
             Assert(batch[0].Start == revised.Start && batch[0].End == revised.End, "Batch export uses the final edited boundaries");
             var latest = new SessionStore(Path.Combine(directory, "ui", "session.json")).Data.LatestClips(source, stamp);
             Assert(latest.Length == 2 && latest[0] == revised, "Draft markers restore independently of exported snapshots");
@@ -255,7 +306,9 @@ var thread = new Thread(() =>
                 Mouse("Down", seconds, Scale(12), MouseButtons.Left);
                 Mouse("Up", seconds, Scale(12), MouseButtons.Left);
                 LeaveTimeline();
-                await WaitForUi(() => Math.Abs(CurrentTime().TotalSeconds - seconds) < 0.08);
+                var engine = (Player)typeof(MainWindow).GetField("player", BindingFlags.Instance | BindingFlags.NonPublic)!
+                    .GetValue(app)!;
+                await WaitForUi(() => !engine.Seeking && Math.Abs(CurrentTime().TotalSeconds - seconds) < 0.08);
             }
         }
         catch (Exception ex) { uiError = ex; }

@@ -4,17 +4,31 @@ internal sealed class SidebarDivider : Control
 {
     private readonly TableLayoutPanel layout;
     private bool dragging;
-    private readonly Action<double> resized;
+    private readonly Action<int> move;
+    private readonly Action finished;
 
-    public SidebarDivider(TableLayoutPanel layout, Action<double> resized)
+    public SidebarDivider(TableLayoutPanel layout, bool horizontal, Action<int> move, Action finished)
     {
         this.layout = layout;
-        this.resized = resized;
+        this.move = move;
+        this.finished = finished;
         Dock = DockStyle.Fill;
         Margin = Padding.Empty;
-        Cursor = Cursors.SizeWE;
+        Cursor = horizontal ? Cursors.SizeNS : Cursors.SizeWE;
         BackColor = EditorTheme.Background;
-        AccessibleName = "调整侧边栏宽度";
+        AccessibleName = horizontal ? "调整时间轴高度" : "调整侧边栏宽度";
+        Horizontal = horizontal;
+    }
+
+    private bool Horizontal { get; }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        using var pen = new Pen(EditorTheme.Border, Math.Max(1, LogicalToDeviceUnits(1)));
+        if (Horizontal)
+            e.Graphics.DrawLine(pen, 0, Height / 2, Width, Height / 2);
+        else
+            e.Graphics.DrawLine(pen, Width / 2, 0, Width / 2, Height);
     }
 
     protected override void OnMouseDown(MouseEventArgs e)
@@ -30,12 +44,7 @@ internal sealed class SidebarDivider : Control
         base.OnMouseMove(e);
         if (!dragging) return;
         var point = layout.PointToClient(PointToScreen(e.Location));
-        var minimum = Math.Max(330 * DeviceDpi / 96d, layout.ClientSize.Width * 0.28);
-        var width = Math.Clamp(layout.ClientSize.Width - point.X, minimum,
-            Math.Max(minimum, Math.Min(layout.ClientSize.Width * 0.62, layout.ClientSize.Width - 360 * DeviceDpi / 96d)));
-        var fraction = width / Math.Max(1, layout.ClientSize.Width - Width);
-        layout.ColumnStyles[0].Width = (float)(100 * (1 - fraction));
-        layout.ColumnStyles[2].Width = (float)(100 * fraction);
+        move(Horizontal ? point.Y : point.X);
     }
 
     protected override void OnMouseUp(MouseEventArgs e)
@@ -44,7 +53,7 @@ internal sealed class SidebarDivider : Control
         if (!dragging) return;
         dragging = Capture = false;
         BackColor = EditorTheme.Background;
-        resized(layout.ColumnStyles[2].Width / 100);
+        finished();
     }
 
     protected override void OnMouseCaptureChanged(EventArgs e)

@@ -19,7 +19,8 @@ internal sealed class FluentButton : Button
         BackColor = EditorTheme.Raised;
         ForeColor = EditorTheme.Text;
         AutoSize = true;
-        Padding = new Padding(9, 0, 9, 0);
+        AutoSizeMode = AutoSizeMode.GrowAndShrink;
+        Padding = new Padding(12, 6, 12, 6);
         Margin = new Padding(0, 3, 6, 3);
         MinimumSize = new Size(32, 30);
         Height = 30;
@@ -40,22 +41,33 @@ internal sealed class FluentButton : Button
         e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
         using var path = new GraphicsPath();
         var rect = new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f);
-        path.AddRoundedRectangle(rect, new SizeF(4, 4));
+        var scale = DeviceDpi / 96f;
+        path.AddRoundedRectangle(rect, new SizeF(5 * scale, 5 * scale));
         var background = !Enabled ? EditorTheme.Raised : Emphasized ? EditorTheme.Accent
             : pressed ? EditorTheme.Surface : hover ? Color.FromArgb(57, 57, 57) : BackColor;
         using var fill = new SolidBrush(background);
-        using var border = new Pen(Focused ? EditorTheme.Accent : EditorTheme.Border);
+        using var border = new Pen(Focused ? EditorTheme.Text : pressed ? EditorTheme.Surface : EditorTheme.Border, scale);
         e.Graphics.FillPath(fill, path);
         e.Graphics.DrawPath(border, path);
         var color = !Enabled ? EditorTheme.Muted : Emphasized ? EditorTheme.Surface : EditorTheme.Text;
         if (Glyph is not null)
         {
-            using var font = new Font("Segoe Fluent Icons", 11);
+            using var font = new Font("Segoe Fluent Icons", 16 * scale, GraphicsUnit.Pixel);
             TextRenderer.DrawText(e.Graphics, Glyph, font, ClientRectangle, color,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
         }
         else
             TextRenderer.DrawText(e.Graphics, Text, Font, ClientRectangle, color,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
+    }
+
+    public override Size GetPreferredSize(Size proposedSize)
+    {
+        var scale = DeviceDpi / 96f;
+        var text = Glyph is null
+            ? TextRenderer.MeasureText(Text, Font, Size.Empty, TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix)
+            : new Size((int)Math.Ceiling(18 * scale), (int)Math.Ceiling(18 * scale));
+        return new Size(Math.Max(MinimumSize.Width, text.Width + Padding.Horizontal),
+            Math.Max((int)Math.Ceiling(32 * scale), text.Height + Padding.Vertical));
     }
 }

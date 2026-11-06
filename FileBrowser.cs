@@ -32,7 +32,9 @@ internal sealed class FileBrowser : UserControl
     private int historyIndex = -1;
     private int request;
     private bool thumbnailBusy;
+    private bool fittingColumns;
     private string? selectedPath;
+    private string? playingPath;
 
     public string? CurrentFolder { get; private set; }
     public bool LargeIcons => entries.View == View.LargeIcon;
@@ -43,11 +45,12 @@ internal sealed class FileBrowser : UserControl
 
     public FileBrowser()
     {
+        SuspendLayout();
+        AutoScaleMode = AutoScaleMode.Inherit;
         Dock = DockStyle.Fill;
         Margin = Padding.Empty;
         BackColor = EditorTheme.Surface;
         ForeColor = EditorTheme.Text;
-        Font = new Font("Segoe UI Variable Text", 9);
         address.BackColor = search.BackColor = EditorTheme.Raised;
         address.ForeColor = search.ForeColor = EditorTheme.Text;
         address.AccessibleName = "文件夹地址";
@@ -64,44 +67,48 @@ internal sealed class FileBrowser : UserControl
         entries.FullRowSelect = true;
         places.ItemHeight = 32;
         places.Indent = 14;
-        places.DrawMode = TreeViewDrawMode.OwnerDrawText;
+        places.DrawMode = TreeViewDrawMode.OwnerDrawAll;
+        places.ShowNodeToolTips = true;
 
         back = Icon("\uE72B", "后退", () => BrowseHistory(-1));
         forward = Icon("\uE72A", "前进", () => BrowseHistory(1));
         var up = Icon("\uE74A", "向上一级", Up);
         var refresh = Icon("\uE72C", "刷新", () => _ = NavigateAsync(CurrentFolder));
-        var navigation = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Margin = Padding.Empty };
+        var navigation = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink, Margin = Padding.Empty };
         navigation.Controls.AddRange([back, forward, up, refresh]);
-        var pathBar = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = Padding.Empty };
-        pathBar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 148));
+        var pathBar = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = Padding.Empty, AutoSize = true };
+        pathBar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         pathBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        pathBar.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        pathBar.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         pathBar.Controls.Add(navigation, 0, 0);
         pathBar.Controls.Add(InputContainer(address), 1, 0);
 
         large = Icon("\uE80A", "大图标", () => SetView(true));
         details = Icon("\uE8FD", "列表", () => SetView(false));
-        var viewBar = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Margin = Padding.Empty };
+        var viewBar = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink, Margin = Padding.Empty };
         viewBar.Controls.AddRange([
             new Label { Text = "查看", AutoSize = true, ForeColor = EditorTheme.Muted, Margin = new Padding(3, 10, 8, 0) },
             large, details
         ]);
-        var commandBar = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = Padding.Empty };
-        commandBar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 145));
+        var commandBar = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = Padding.Empty, AutoSize = true };
+        commandBar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         commandBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        commandBar.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        commandBar.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         commandBar.Controls.Add(viewBar, 0, 0);
         commandBar.Controls.Add(InputContainer(search), 1, 0);
 
         var body = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = Padding.Empty };
-        body.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 128));
+        body.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 148));
         body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         body.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         body.Controls.Add(places, 0, 0);
         body.Controls.Add(entries, 1, 0);
         var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4, Padding = new Padding(6) };
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 41));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 41));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
         layout.Controls.Add(pathBar, 0, 0);
@@ -143,7 +150,12 @@ internal sealed class FileBrowser : UserControl
             e.Graphics.FillRectangle(fill, e.Bounds);
             DrawText(e.Graphics, e.Header?.Text ?? "", e.Bounds, EditorTheme.Muted);
         };
-        entries.HandleCreated += (_, _) => SetWindowTheme(entries.Handle, "DarkMode_Explorer", null);
+        entries.HandleCreated += (_, _) =>
+        {
+            SetWindowTheme(entries.Handle, "DarkMode_Explorer", null);
+            UpdateMetrics();
+        };
+        entries.SizeChanged += (_, _) => FitColumns();
         places.HandleCreated += (_, _) => SetWindowTheme(places.Handle, "DarkMode_Explorer", null);
         entries.KeyDown += (_, e) =>
         {
@@ -157,6 +169,7 @@ internal sealed class FileBrowser : UserControl
         };
         search.TextChanged += (_, _) => Filter();
         SetView(true, notify: false);
+        ResumeLayout(performLayout: true);
     }
 
     public async Task NavigateAsync(string? path, string? select = null, bool addHistory = true)
@@ -213,6 +226,7 @@ internal sealed class FileBrowser : UserControl
         entries.VirtualListSize = 0;
         visible = all.Where(entry => entry.Name.Contains(search.Text, StringComparison.CurrentCultureIgnoreCase)).ToArray();
         entries.VirtualListSize = visible.Length;
+        FitColumns();
         SelectPath(selectedPath);
         info.Text = $"{visible.Length} 个项目";
         entries.Invalidate();
@@ -228,9 +242,16 @@ internal sealed class FileBrowser : UserControl
         entries.EnsureVisible(index);
     }
 
+    public void SetPlayingFile(string path)
+    {
+        playingPath = path;
+        entries.Invalidate();
+    }
+
     public void SetView(bool largeIcons, bool notify = true)
     {
         entries.View = largeIcons ? View.LargeIcon : View.Details;
+        FitColumns();
         large.Emphasized = largeIcons;
         details.Emphasized = !largeIcons;
         large.Invalidate();
@@ -282,14 +303,17 @@ internal sealed class FileBrowser : UserControl
     private void DrawPlace(object? sender, DrawTreeNodeEventArgs e)
     {
         if (e.Node is null) return;
-        var rect = new Rectangle(e.Bounds.X, e.Bounds.Y, places.Width - e.Bounds.X, e.Bounds.Height);
+        var rect = new Rectangle(0, e.Bounds.Y, places.ClientSize.Width, e.Bounds.Height);
         using var fill = new SolidBrush(e.Node.IsSelected ? EditorTheme.Border : EditorTheme.Surface);
         e.Graphics.FillRectangle(fill, rect);
-        using var iconFont = new Font("Segoe Fluent Icons", 11);
+        var left = Scale(8) + e.Node.Level * places.Indent;
+        var iconBounds = new Rectangle(left, rect.Top, Scale(24), rect.Height);
+        using var iconFont = new Font("Segoe Fluent Icons", Scale(16), GraphicsUnit.Pixel);
         TextRenderer.DrawText(e.Graphics, e.Node.Parent is not null ? "\uEDA2" : "\uE8B7", iconFont,
-            new Rectangle(rect.Left + 2, rect.Top, 23, rect.Height), e.Node.Parent is not null ? EditorTheme.Muted : Color.FromArgb(255, 209, 93),
-            TextFormatFlags.VerticalCenter);
-        DrawText(e.Graphics, e.Node.Text, new Rectangle(rect.Left + 25, rect.Top, rect.Width - 25, rect.Height), EditorTheme.Text);
+            iconBounds, e.Node.Parent is not null ? EditorTheme.Muted : Color.FromArgb(255, 209, 93),
+            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
+        var textLeft = iconBounds.Right + Scale(8);
+        DrawText(e.Graphics, e.Node.Text, new Rectangle(textLeft, rect.Top, Math.Max(1, rect.Right - textLeft - Scale(4)), rect.Height), EditorTheme.Text);
     }
 
     private void DrawEntry(object? sender, DrawListViewItemEventArgs e)
@@ -297,8 +321,9 @@ internal sealed class FileBrowser : UserControl
         if (!LargeIcons) return;
         var entry = visible[e.ItemIndex];
         var selected = e.Item?.Selected == true;
-        using var background = new SolidBrush(selected ? EditorTheme.Border : EditorTheme.Surface);
-        var bounds = Rectangle.Inflate(e.Bounds, -3, -2);
+        var playing = string.Equals(entry.Path, playingPath, StringComparison.OrdinalIgnoreCase);
+        using var background = new SolidBrush(selected ? EditorTheme.Border : playing ? Color.FromArgb(35, 51, 65) : EditorTheme.Surface);
+        var bounds = Rectangle.Inflate(e.Bounds, -Scale(3), -Scale(2));
         e.Graphics.FillRectangle(background, bounds);
         var scale = DeviceDpi / 96f;
         var imageBounds = new Rectangle(bounds.X + (int)(8 * scale), bounds.Y + (int)(5 * scale),
@@ -312,39 +337,51 @@ internal sealed class FileBrowser : UserControl
         }
         else
         {
-            using var iconFont = new Font("Segoe Fluent Icons", 38);
+            using var iconFont = new Font("Segoe Fluent Icons", Scale(50), GraphicsUnit.Pixel);
             TextRenderer.DrawText(e.Graphics, entry.Directory ? "\uE8B7" : entry.Video ? "\uE714" : "\uE8A5", iconFont,
                 imageBounds, entry.Directory ? Color.FromArgb(255, 209, 93) : EditorTheme.Accent,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
             if (entry.Video) RequestThumbnail(entry);
         }
-        var caption = new Rectangle(bounds.X + 3, imageBounds.Bottom + 3, bounds.Width - 6,
-            Math.Max(1, bounds.Bottom - imageBounds.Bottom - 3));
-        TextRenderer.DrawText(e.Graphics, entry.Name, Font, caption, EditorTheme.Text,
+        var caption = new Rectangle(bounds.X + Scale(3), imageBounds.Bottom + Scale(3), bounds.Width - Scale(6),
+            Math.Max(1, bounds.Bottom - imageBounds.Bottom - Scale(3)));
+        TextRenderer.DrawText(e.Graphics, entry.Name, Font, caption, playing ? EditorTheme.Accent : EditorTheme.Text,
             TextFormatFlags.HorizontalCenter | TextFormatFlags.WordBreak | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+        if (playing)
+        {
+            using var accent = new Pen(EditorTheme.Accent, Math.Max(1, Scale(2)));
+            e.Graphics.DrawRectangle(accent, bounds);
+        }
         if (selected && entries.Focused) e.DrawFocusRectangle();
     }
 
     private void DrawDetails(object? sender, DrawListViewSubItemEventArgs e)
     {
-        using var fill = new SolidBrush(e.Item?.Selected == true ? EditorTheme.Border : EditorTheme.Surface);
+        var entry = visible[e.ItemIndex];
+        var playing = string.Equals(entry.Path, playingPath, StringComparison.OrdinalIgnoreCase);
+        using var fill = new SolidBrush(e.Item?.Selected == true ? EditorTheme.Border : playing ? Color.FromArgb(35, 51, 65) : EditorTheme.Surface);
         e.Graphics.FillRectangle(fill, e.Bounds);
         var bounds = e.Bounds;
         if (e.ColumnIndex == 0)
         {
-            var entry = visible[e.ItemIndex];
-            using var iconFont = new Font("Segoe Fluent Icons", 11);
+            using var iconFont = new Font("Segoe Fluent Icons", Scale(16), GraphicsUnit.Pixel);
             TextRenderer.DrawText(e.Graphics, entry.Directory ? "\uE8B7" : entry.Video ? "\uE714" : "\uE8A5",
-                iconFont, new Rectangle(bounds.X + 4, bounds.Y, 24, bounds.Height),
-                entry.Directory ? Color.FromArgb(255, 209, 93) : EditorTheme.Muted, TextFormatFlags.VerticalCenter);
-            bounds.X += 28;
-            bounds.Width -= 28;
+                iconFont, new Rectangle(bounds.X + Scale(4), bounds.Y, Scale(24), bounds.Height),
+                entry.Directory ? Color.FromArgb(255, 209, 93) : EditorTheme.Muted,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
+            bounds.X += Scale(34);
+            bounds.Width -= Scale(34);
         }
-        DrawText(e.Graphics, e.SubItem?.Text ?? "", bounds, EditorTheme.Text);
+        DrawText(e.Graphics, e.SubItem?.Text ?? "", bounds, playing ? EditorTheme.Accent : EditorTheme.Text);
+        if (playing && e.ColumnIndex == 0)
+        {
+            using var accent = new SolidBrush(EditorTheme.Accent);
+            e.Graphics.FillRectangle(accent, e.Bounds.X, e.Bounds.Y, Scale(3), e.Bounds.Height);
+        }
     }
 
     private void DrawText(Graphics g, string text, Rectangle bounds, Color color) =>
-        TextRenderer.DrawText(g, text, Font, Rectangle.Inflate(bounds, -4, 0), color,
+        TextRenderer.DrawText(g, text, Font, Rectangle.Inflate(bounds, -Scale(5), 0), color,
             TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
 
     private void RequestThumbnail(BrowserEntry entry)
@@ -387,7 +424,7 @@ internal sealed class FileBrowser : UserControl
 
     private FluentButton Icon(string glyph, string label, Action action)
     {
-        var button = new FluentButton { Glyph = glyph, AutoSize = false, Width = 30, Height = 30,
+        var button = new FluentButton { Glyph = glyph, AutoSize = true, Padding = new Padding(7, 7, 7, 7),
             AccessibleName = label, Margin = new Padding(0, 3, 4, 3) };
         tips.SetToolTip(button, label);
         button.Click += (_, _) => action();
@@ -396,8 +433,10 @@ internal sealed class FileBrowser : UserControl
 
     private static Panel InputContainer(TextBox input)
     {
-        var panel = new Panel { Dock = DockStyle.Fill, BackColor = EditorTheme.Raised,
-            Padding = new Padding(8, 8, 6, 4), Margin = new Padding(2, 3, 2, 5) };
+        var panel = new Panel { Dock = DockStyle.Fill, BackColor = EditorTheme.Raised, AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Padding = new Padding(10, 9, 10, 9), Margin = new Padding(2, 3, 2, 5) };
+        input.Dock = DockStyle.Top;
         panel.Controls.Add(input);
         return panel;
     }
@@ -405,6 +444,41 @@ internal sealed class FileBrowser : UserControl
     private static string SizeText(long bytes) => bytes >= 1_048_576
         ? (bytes / 1_048_576d).ToString("N1", CultureInfo.CurrentCulture) + " MB"
         : Math.Ceiling(bytes / 1024d).ToString(CultureInfo.CurrentCulture) + " KB";
+
+    private void FitColumns()
+    {
+        if (fittingColumns || entries.View != View.Details || !entries.IsHandleCreated) return;
+        fittingColumns = true;
+        try
+        {
+            var available = entries.ClientSize.Width;
+            var date = TextRenderer.MeasureText("2026/11/06 16:05", Font).Width + Scale(18);
+            var size = TextRenderer.MeasureText("1,603.8 MB", Font).Width + Scale(18);
+            if (available <= 0) return;
+            var name = Math.Max(available / 3, available - date - size);
+            date = Math.Max(0, Math.Min(date, (available - name) * 3 / 5));
+            entries.Columns[0].Width = name;
+            entries.Columns[1].Width = date;
+            entries.Columns[2].Width = available - name - date;
+        }
+        finally { fittingColumns = false; }
+    }
+
+    private void UpdateMetrics()
+    {
+        places.ItemHeight = Math.Max(Font.Height + Scale(14), Scale(34));
+        places.Indent = Scale(14);
+        tileSize.ImageSize = new Size(Scale(132), Scale(84));
+        FitColumns();
+    }
+
+    protected override void OnDpiChangedAfterParent(EventArgs e)
+    {
+        base.OnDpiChangedAfterParent(e);
+        UpdateMetrics();
+    }
+
+    private int Scale(int value) => (int)Math.Round(value * DeviceDpi / 96d);
 
     protected override void Dispose(bool disposing)
     {

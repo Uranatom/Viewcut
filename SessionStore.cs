@@ -16,12 +16,14 @@ internal sealed record SourceStamp(long Size, DateTime ModifiedUtc)
 internal sealed record ClipDraft(string Source, SourceStamp Stamp, double Start, double End)
 {
     public Guid Id { get; init; } = Guid.NewGuid();
+    public string? Name { get; init; }
 }
 
 internal sealed record ExportJob(string Source, SourceStamp Stamp, string Folder, double Start, double End)
 {
     public Guid Id { get; init; } = Guid.NewGuid();
     public Guid? ClipId { get; set; }
+    public string? Name { get; init; }
     public JobState State { get; set; }
     public string? Output { get; set; }
     public string? Error { get; set; }
@@ -34,6 +36,7 @@ internal sealed class Session
     public string? BrowserFolder { get; set; }
     public bool BrowserLargeIcons { get; set; } = true;
     public double SidebarFraction { get; set; } = 0.4;
+    public double TimelineFraction { get; set; } = 0.24;
     public List<ClipDraft> Clips { get; init; } = [];
     public List<ExportJob> Jobs { get; init; } = [];
 
@@ -43,17 +46,26 @@ internal sealed class Session
 
     public ExportJob? ExportFor(ClipDraft clip, string? folder) => Jobs.LastOrDefault(job =>
         job.ClipId == clip.Id && job.Stamp == clip.Stamp && job.Start == clip.Start && job.End == clip.End
+        && string.Equals(job.Name, clip.Name, StringComparison.Ordinal)
         && string.Equals(job.Source, clip.Source, StringComparison.OrdinalIgnoreCase)
         && string.Equals(job.Folder, folder, StringComparison.OrdinalIgnoreCase));
 
     public ExportJob[] QueueExport(string source, SourceStamp stamp, string folder)
     {
         var batch = LatestClips(source, stamp)
-            .Where(clip => ExportFor(clip, folder) is not { State: JobState.Waiting or JobState.Running })
-            .Select(clip => new ExportJob(source, stamp, folder, clip.Start, clip.End) { ClipId = clip.Id })
+            .Where(clip => CanQueue(clip, folder))
+            .Select(clip => new ExportJob(source, stamp, folder, clip.Start, clip.End) { ClipId = clip.Id, Name = clip.Name })
+            .OrderByDescending(job => job.Name is not null)
             .ToArray();
         Jobs.AddRange(batch);
         return batch;
+    }
+
+    public bool CanQueue(ClipDraft clip, string? folder)
+    {
+        var job = ExportFor(clip, folder);
+        return job?.State is not (JobState.Waiting or JobState.Running)
+            && !(clip.Name is not null && job?.State == JobState.Done && File.Exists(job.Output));
     }
 }
 

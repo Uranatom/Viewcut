@@ -16,6 +16,9 @@ internal sealed class MainWindow : Form
     private readonly ListView jobs = CreateList(("状态", 72), ("导出范围", 230));
     private readonly Label time = new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleRight };
     private readonly Label mediaName = new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true, Text = "播放器" };
+    private readonly Label activeFile = new() { Dock = DockStyle.Fill, AutoEllipsis = true, TextAlign = ContentAlignment.MiddleLeft,
+        Padding = new Padding(10, 5, 10, 5), Margin = new Padding(6, 0, 6, 4),
+        BackColor = EditorTheme.Raised, ForeColor = EditorTheme.Accent, Text = "尚未加载视频" };
     private readonly Label status = new() { Dock = DockStyle.Fill, AutoEllipsis = true, TextAlign = ContentAlignment.MiddleLeft,
         ForeColor = EditorTheme.Muted };
     private readonly Button pause = Button("暂停");
@@ -41,16 +44,20 @@ internal sealed class MainWindow : Form
 
     public MainWindow(SessionStore store, string? input)
     {
+        SuspendLayout();
         this.store = store;
         Text = "Viewcut";
         ClientSize = new Size(1360, 800);
-        MinimumSize = new Size(1024, 600);
+        MinimumSize = new Size(860, 490);
         StartPosition = FormStartPosition.CenterScreen;
+        AutoScaleDimensions = new SizeF(96, 96);
         AutoScaleMode = AutoScaleMode.Dpi;
-        Font = new Font("Segoe UI Variable Text", 9);
+        Font = new Font("Segoe UI Variable Text", 9.5f);
         BackColor = EditorTheme.Background;
         ForeColor = EditorTheme.Text;
         time.Font = new Font("Segoe UI Variable Text", 10);
+        time.AutoSize = true;
+        time.Margin = new Padding(12, 0, 6, 0);
         time.ForeColor = EditorTheme.Accent;
         time.BackColor = EditorTheme.Surface;
         time.Padding = new Padding(8, 0, 8, 0);
@@ -66,9 +73,12 @@ internal sealed class MainWindow : Form
         split.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         var playback = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1,
             BackColor = EditorTheme.Surface, Margin = Padding.Empty };
-        playback.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+        playback.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        playback.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         playback.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         video.Margin = Padding.Empty;
+        mediaName.AutoSize = true;
+        mediaName.Padding = new Padding(12, 9, 12, 9);
         video.Paint += DrawEmptyVideo;
         playback.Controls.Add(mediaName, 0, 0);
         playback.Controls.Add(video, 0, 1);
@@ -78,46 +88,71 @@ internal sealed class MainWindow : Form
         exportPage.Controls.Add(jobs);
         retry.Dock = DockStyle.Bottom;
         exportPage.Controls.Add(retry);
-        sections = [browser, clips, exportPage];
+        var browserViewport = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
+        browser.Dock = DockStyle.Top;
+        browserViewport.Controls.Add(browser);
+        browserViewport.SizeChanged += (_, _) => browser.Height = Math.Max(browserViewport.ClientSize.Height, LogicalToDeviceUnits(176));
+        sections = [browserViewport, clips, exportPage];
         sectionButtons = [Button("文件", () => ShowSection(0)), Button("片段", () => ShowSection(1)),
             Button("导出", () => ShowSection(2))];
-        var sectionNav = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false,
-            Margin = Padding.Empty, Padding = new Padding(6, 2, 0, 0) };
+        var sectionNav = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = true, AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink, Margin = Padding.Empty, Padding = new Padding(6, 4, 0, 4) };
         sectionNav.Controls.AddRange(sectionButtons);
         var sectionBody = new Panel { Dock = DockStyle.Fill, Margin = Padding.Empty };
         sectionBody.Controls.AddRange(sections);
-        var sidebar = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1,
+        var sidebar = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1,
             BackColor = EditorTheme.Surface, Margin = Padding.Empty };
-        sidebar.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+        sidebar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        sidebar.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        sidebar.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
         sidebar.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         sidebar.Controls.Add(sectionNav, 0, 0);
-        sidebar.Controls.Add(sectionBody, 0, 1);
+        sidebar.Controls.Add(activeFile, 0, 1);
+        sidebar.Controls.Add(sectionBody, 0, 2);
         split.Controls.Add(sidebar, 2, 0);
-        split.Controls.Add(new SidebarDivider(split, value =>
+        split.Controls.Add(new SidebarDivider(split, horizontal: false, x =>
         {
-            store.Data.SidebarFraction = value;
+            var width = Math.Max(1, split.ClientSize.Width - LogicalToDeviceUnits(7));
+            ApplySidebarWidth((width - x) / (double)width);
+        }, () =>
+        {
+            store.Data.SidebarFraction = split.ColumnStyles[2].Width / 100;
             Save();
         }), 1, 0);
+        split.SizeChanged += (_, _) => ApplySidebarWidth(store.Data.SidebarFraction);
+
+        void ApplySidebarWidth(double preferred)
+        {
+            var width = Math.Max(1, split.ClientSize.Width - LogicalToDeviceUnits(7));
+            var min = Math.Min(0.62, Math.Max(0.28, LogicalToDeviceUnits(390) / (double)width));
+            var max = Math.Max(min, Math.Min(0.62, 1 - LogicalToDeviceUnits(320) / (double)width));
+            var value = Math.Clamp(double.IsFinite(preferred) ? preferred : 0.4, min, max);
+            split.ColumnStyles[0].Width = (float)(100 * (1 - value));
+            split.ColumnStyles[2].Width = (float)(100 * value);
+        }
         ShowSection(0);
 
-        var toolbar = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Margin = Padding.Empty };
+        var toolbar = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = true, AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink, Margin = Padding.Empty, Padding = new Padding(2, 3, 0, 9) };
         var wordmark = new Label { Text = "Viewcut", AutoSize = true, Font = new Font("Segoe UI Variable Display Semib", 16),
-            Margin = new Padding(0, 2, 18, 0), ForeColor = EditorTheme.Text };
+            Margin = new Padding(0, 1, 22, 1), ForeColor = EditorTheme.Text, AccessibleName = "Viewcut" };
         toolbar.Controls.AddRange([wordmark, Button("选择保存目录", ChooseDestination), Button("打开保存目录", OpenDestination)]);
 
-        var transport = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Margin = Padding.Empty };
+        var transport = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false,
+            Margin = Padding.Empty, Padding = new Padding(0, 5, 0, 5) };
         exportAll.Click += (_, _) => ExportCurrent();
         Emphasize(exportAll, true);
         transport.Controls.AddRange([pause, Button("P  上一条", () => MoveFile(-1)), Button("N  下一条", () => MoveFile(1)),
             Button("I  起点", MarkStart), Button("O  终点", MarkEnd)]);
         var transportBar = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 1, ColumnCount = 2, Margin = Padding.Empty };
         transportBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        transportBar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 236));
+        transportBar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         transportBar.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         transportBar.Controls.Add(transport, 0, 0);
         transportBar.Controls.Add(time, 1, 0);
 
-        var timelineHeader = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Margin = Padding.Empty };
+        var timelineHeader = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = true, AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink, Margin = Padding.Empty, Padding = new Padding(8, 5, 8, 5) };
         timelineHeader.Controls.AddRange([
             new Label { Text = "片段时间轴", AutoSize = true, Margin = new Padding(12, 9, 15, 0), ForeColor = EditorTheme.Text },
             Button("−", () => timeline.Zoom(1.5)), Button("+", () => timeline.Zoom(0.67)), Button("全览", timeline.Fit), exportAll,
@@ -126,24 +161,56 @@ internal sealed class MainWindow : Form
         ]);
         var timelinePanel = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1,
             BackColor = EditorTheme.Surface, Margin = Padding.Empty };
-        timelinePanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+        timelinePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        timelinePanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         timelinePanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         timeline.Margin = Padding.Empty;
         timelinePanel.Controls.Add(timelineHeader, 0, 0);
         timelinePanel.Controls.Add(timeline, 0, 1);
 
-        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 5, ColumnCount = 1, Padding = new Padding(10) };
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 41));
+        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 6, ColumnCount = 1, Padding = new Padding(10) };
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 119));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 7));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 158));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
         layout.Controls.Add(toolbar, 0, 0);
         layout.Controls.Add(split, 0, 1);
         layout.Controls.Add(transportBar, 0, 2);
-        layout.Controls.Add(timelinePanel, 0, 3);
-        layout.Controls.Add(status, 0, 4);
+        var timelineFraction = store.Data.TimelineFraction;
+        layout.Controls.Add(new SidebarDivider(layout, horizontal: true, y =>
+        {
+            var available = split.Height + timelinePanel.Height;
+            var bottom = layout.ClientSize.Height - layout.Padding.Bottom - layout.RowStyles[5].Height;
+            timelineFraction = ApplyTimelineHeight((int)(bottom - y) - LogicalToDeviceUnits(7), available);
+        }, () =>
+        {
+            store.Data.TimelineFraction = timelineFraction;
+            Save();
+        }), 0, 3);
+        layout.Controls.Add(timelinePanel, 0, 4);
+        layout.Controls.Add(status, 0, 5);
         Controls.Add(layout);
+
+        void FitTimeline()
+        {
+            var available = layout.ClientSize.Height - layout.Padding.Vertical
+                - toolbar.PreferredSize.Height - LogicalToDeviceUnits(52 + 7 + 28);
+            ApplyTimelineHeight((int)(available * (double.IsFinite(timelineFraction) ? timelineFraction : 0.24)), available);
+        }
+        double ApplyTimelineHeight(int height, int available)
+        {
+            var headerHeight = timelineHeader.GetPreferredSize(new Size(Math.Max(1, layout.ClientSize.Width - layout.Padding.Horizontal), 0)).Height;
+            var minimum = headerHeight + timeline.GetPreferredSize(Size.Empty).Height;
+            var maximum = Math.Max(minimum, available - LogicalToDeviceUnits(245));
+            var value = Math.Clamp(height, minimum, maximum);
+            if (layout.RowStyles[4].Height != value) layout.RowStyles[4].Height = value;
+            return value / (double)Math.Max(1, available);
+        }
+        layout.SizeChanged += (_, _) => FitTimeline();
+        timelineHeader.FontChanged += (_, _) => FitTimeline();
 
         browser.SetView(store.Data.BrowserLargeIcons, notify: false);
         browser.VideoActivated += path =>
@@ -163,7 +230,7 @@ internal sealed class MainWindow : Form
         jobs.RetrieveVirtualItem += (_, e) =>
         {
             var job = store.Data.Jobs[e.ItemIndex];
-            e.Item = new ListViewItem([JobLabel(job.State), $"{Path.GetFileName(job.Source)}  {Clock(job.Start)}–{Clock(job.End)}"])
+            e.Item = new ListViewItem([JobLabel(job.State), $"{job.Name ?? Path.GetFileName(job.Source)}  {Clock(job.Start)}–{Clock(job.End)}"])
             {
                 ToolTipText = job.Error ?? job.Output ?? job.Folder
             };
@@ -174,8 +241,8 @@ internal sealed class MainWindow : Form
         clips.RetrieveVirtualItem += (_, e) =>
         {
             var clip = ranges[e.ItemIndex];
-            e.Item = new ListViewItem([$"{clip.Number:D2}", $"{Clock(clip.Start)}  →  {Clock(clip.End)}"])
-                { ToolTipText = ClipState(clipDrafts[e.ItemIndex]) + "  ·  " + Clock(clip.End - clip.Start) };
+            e.Item = new ListViewItem([clip.DisplayName, $"{Clock(clip.Start)}  →  {Clock(clip.End)}"])
+                { ToolTipText = $"{clip.DisplayName}  ·  {ClipState(clipDrafts[e.ItemIndex])}  ·  {Clock(clip.End - clip.Start)}" };
         };
         clips.SelectedIndexChanged += (_, _) =>
         {
@@ -192,6 +259,7 @@ internal sealed class MainWindow : Form
             ShowSection(1);
         };
         timeline.ClipAdjusted += AdjustClip;
+        timeline.RenameRequested += RenameClip;
         timeline.SeekRequested += seconds => player?.Seek(seconds, true);
         timeline.PreviewRequested += PreviewAt;
         Deactivate += (_, _) => timeline.CancelGesture();
@@ -199,6 +267,10 @@ internal sealed class MainWindow : Form
         FormClosing += HandleClosing;
         Shown += (_, _) =>
         {
+            var workArea = Screen.FromControl(this).WorkingArea;
+            if (Width > workArea.Width || Height > workArea.Height)
+                Size = new Size(Math.Min(Width, workArea.Width), Math.Min(Height, workArea.Height));
+            FitTimeline();
             timer.Start();
             RefreshJobs();
             SetStatus("在右侧浏览文件夹，双击视频开始粗筛。");
@@ -207,6 +279,7 @@ internal sealed class MainWindow : Form
                 ?? Environment.GetFolderPath(Environment.SpecialFolder.MyVideos));
             StartQueue();
         };
+        ResumeLayout(performLayout: true);
     }
 
     public void ActivateInput(string? path)
@@ -244,6 +317,9 @@ internal sealed class MainWindow : Form
             player.Open(path);
             preview?.ResetMedia();
             current = path;
+            activeFile.Text = "正在处理\n" + Path.GetFileName(path);
+            activeFile.AccessibleDescription = path;
+            browser.SetPlayingFile(path);
             sourceStamp = stamp;
             start = null;
             selectedClip = null;
@@ -317,6 +393,12 @@ internal sealed class MainWindow : Form
         if (current is not { } path || sourceStamp is not { } stamp || clipDrafts.Length == 0) return;
         if (store.Data.Destination is null) ChooseDestination();
         if (store.Data.Destination is not { } folder || closing) return;
+        foreach (var clip in clipDrafts.Where(clip => store.Data.CanQueue(clip, folder)))
+        {
+            if (CheckClipName(clip, clip.Name, folder) is not { } conflict) continue;
+            MessageBox.Show(this, $"{clip.Name}\n{conflict}", "无法导出片段", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
         var batch = store.Data.QueueExport(path, stamp, folder);
         if (!Save())
         {
@@ -360,6 +442,8 @@ internal sealed class MainWindow : Form
                 job.State = JobState.Failed;
                 job.Error = ex.Message;
                 SetStatus($"导出失败：{ex.Message}");
+                if (ex is ClipNameConflictException && !closing)
+                    MessageBox.Show(this, ex.Message, "导出文件重名", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
             RefreshJobs();
             if (!Save()) break;
@@ -444,18 +528,50 @@ internal sealed class MainWindow : Form
         RefreshClips();
     }
 
+    private void RenameClip(Guid id)
+    {
+        var clip = clipDrafts.FirstOrDefault(item => item.Id == id);
+        if (clip is null) return;
+        preview?.Hide();
+        using var dialog = new RenameClipDialog(clip.Name, name => string.Equals(name, clip.Name, StringComparison.Ordinal)
+            ? null : CheckClipName(clip, name, store.Data.Destination));
+        dialog.Opacity = Opacity;
+        if (dialog.ShowDialog(this) != DialogResult.OK || dialog.ClipName == clip.Name) return;
+        var index = store.Data.Clips.FindIndex(item => item.Id == id);
+        if (index < 0) return;
+        store.Data.Clips[index] = clip with { Name = dialog.ClipName };
+        if (!Save())
+        {
+            store.Data.Clips[index] = clip;
+            return;
+        }
+        RefreshClips();
+        SetStatus(dialog.ClipName is { } name ? $"片段已命名为 {name}。" : "已恢复默认片段名称。");
+    }
+
+    private string? CheckClipName(ClipDraft clip, string? name, string? folder)
+    {
+        var extension = Path.GetExtension(clip.Source);
+        var error = ClipNames.Validate(name, clip.Id, clipDrafts, folder, extension);
+        if (error is not null || name is null || folder is null) return error;
+        return store.Data.Jobs.Any(job => job.State is JobState.Waiting or JobState.Running
+            && string.Equals(job.Name, name, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(Path.GetExtension(job.Source), extension, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(job.Folder, folder, StringComparison.OrdinalIgnoreCase))
+            ? "已有同名片段正在排队导出，请换一个名称。" : null;
+    }
+
     private void RefreshClips()
     {
         selectingClip = true;
         clips.VirtualListSize = 0;
         clipDrafts = store.Data.LatestClips(current, sourceStamp);
-        ranges = clipDrafts.Select((clip, index) => new ClipRange(clip.Id, index + 1, clip.Start, clip.End)).ToArray();
+        ranges = clipDrafts.Select((clip, index) => new ClipRange(clip.Id, index + 1, clip.Start, clip.End, clip.Name)).ToArray();
         clips.VirtualListSize = ranges.Length;
         selectingClip = false;
         sectionButtons[1].Text = ranges.Length == 0 ? "片段" : $"片段  {ranges.Length}";
         SelectClip(selectedClip);
-        exportAll.Enabled = clipDrafts.Any(clip => store.Data.ExportFor(clip, store.Data.Destination)
-            is not { State: JobState.Waiting or JobState.Running });
+        exportAll.Enabled = clipDrafts.Any(clip => store.Data.CanQueue(clip, store.Data.Destination));
         exportAll.Text = ranges.Length == 0 ? "导出当前素材全部片段" : $"导出当前素材全部片段 ({ranges.Length})";
     }
 
@@ -621,7 +737,7 @@ internal sealed class MainWindow : Form
         if (current is not null) return;
         var center = video.ClientRectangle;
         center.Height = Math.Max(0, center.Height - 24);
-        using var title = new Font("Segoe UI Variable Text", 16);
+        using var title = new Font("Segoe UI Variable Text", LogicalToDeviceUnits(22), GraphicsUnit.Pixel);
         const TextFormatFlags flags = TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter;
         TextRenderer.DrawText(e.Graphics, "打开素材开始粗筛", title, center, EditorTheme.Text, flags);
         center.Offset(0, 32);
@@ -637,8 +753,8 @@ internal sealed class MainWindow : Form
         foreach (var column in columns) list.Columns.Add(column.Label, column.Width);
         list.SizeChanged += (_, _) =>
         {
-            var reserved = columns.Take(columns.Length - 1).Sum(column => column.Width);
-            list.Columns[^1].Width = Math.Max(columns[^1].Width, list.ClientSize.Width - reserved - 1);
+            var reserved = list.Columns.Cast<ColumnHeader>().Take(columns.Length - 1).Sum(column => column.Width);
+            list.Columns[^1].Width = Math.Max((int)(columns[^1].Width * list.DeviceDpi / 96d), list.ClientSize.Width - reserved);
         };
         list.DrawColumnHeader += (_, e) =>
         {
