@@ -4,7 +4,7 @@ Viewcut 是 Windows 11 x64 上的本地视频粗筛工具。浏览相机或无�
 
 ## 试用
 
-1. 打开 `artifacts\Viewcut\Viewcut.exe`。这个测试版本自带 .NET Desktop Runtime、libmpv 和 FFmpeg。
+1. 运行 `artifacts\Setup\Viewcut-0.3.1-Setup-x64.exe`，选择安装位置和快捷方式，再从开始菜单打开 Viewcut。也可以直接运行 `artifacts\Viewcut\Viewcut.exe`。
 2. 在右侧「文件」浏览文件夹。可用地址栏、常用位置或磁盘入口导航，支持后退、前进、上一级、刷新和当前目录搜索。「大图标」与「列表」按钮可切换视图。双击文件夹进入，双击 MP4／MOV 后加载到播放器。外部右键视频仍可直接播放，右键文件夹则打开文件浏览器。
 3. 用空格键播放／暂停，左右方向键跳转三秒。按 `I` 标记起点，按 `O` 标记终点，按 `N`／`P` 查看下一条／上一条。标记会自动保存，选完后点击「导出当前素材全部片段」开始批量导出，每段生成一个文件。首次导出时可选择保存目录。
 4. 时间轴上的色块代表要保留的片段。悬停在时间轴上可查看对应画面，点击可移动播放头。点选色块后拖动左、右手柄，预览会跟随边界。滚轮缩放时间轴，按住 Shift 滚轮平移，「全览」恢复整条素材。
@@ -18,7 +18,7 @@ Viewcut 是 Windows 11 x64 上的本地视频粗筛工具。浏览相机或无�
 
 ## 资源管理器菜单
 
-在项目目录运行以下命令。脚本为当前用户注册两个菜单入口并通知资源管理器刷新。Windows 11 中可在「显示更多选项」找到。
+安装向导可为当前用户添加右键菜单。直接使用便携版本时，也可在项目目录运行以下命令。Windows 11 中可在「显示更多选项」找到。
 
 ```powershell
 pwsh -NoProfile -File .\Register-Explorer.ps1
@@ -31,9 +31,15 @@ pwsh -NoProfile -File .\Register-Explorer.ps1
 
 运行 `pwsh -NoProfile -File .\Register-Explorer.ps1 -Remove` 可移除这些入口。菜单注册独立于 Windows 的默认应用设置。
 
+## 卸载
+
+从 Windows 设置的「应用 → 已安装的应用」或开始菜单的「卸载 Viewcut」启动卸载。卸载会清理安装文件、快捷方式和安装时添加的右键菜单。可以同时清除本地片段标记、队列和设置。源视频和已导出的视频会保留。
+
 ## 构建与测试
 
 使用 .NET 10 SDK，把 x64 媒体依赖放在 `.tools\mpv\libmpv-2.dll` 和 `.tools\ffmpeg\{ffmpeg,ffprobe}.exe`，运行 `pwsh -NoProfile -File .\Build.ps1`。SDK 可以安装在系统中，也可以放在 `.tools\dotnet`。
+
+使用 Inno Setup 6.7 编译安装包，运行 `pwsh -NoProfile -File .\installer\Build-Setup.ps1`。也可通过 `-Iscc` 指定编译器路径。生成的安装包自带运行时和媒体依赖，安装时可离线使用。
 
 冒烟测试在 `tests\Viewcut.Smoke.csproj`。先构建测试项目，将三个媒体二进制文件复制到测试项目的输出目录，再运行 `Viewcut.Smoke.exe <媒体工具所在目录> <空的测试目录>`。测试会生成 H.264 MP4、HEVC MOV 样片，检查单击选择、双击播放、目录导航与搜索、两种查看方式、侧栏缩放、标记与批量导出、独立悬停预览、首尾拖动和旧版数据迁移。
 

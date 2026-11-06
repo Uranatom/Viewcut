@@ -38,6 +38,7 @@ internal static class Program
             return;
         }
 
+        using var installationGuard = new Mutex(false, @"Local\Viewcut.Running");
         ApplicationConfiguration.Initialize();
         try
         {

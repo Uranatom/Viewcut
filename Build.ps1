@@ -2,7 +2,8 @@
 param(
     [string]$Dotnet,
     [string]$Tools = (Join-Path $PSScriptRoot '.tools'),
-    [string]$RestoreConfig
+    [string]$RestoreConfig,
+    [string]$Output = (Join-Path $PSScriptRoot 'artifacts\Viewcut')
 )
 
 $ErrorActionPreference = 'Stop'
@@ -13,7 +14,7 @@ if (!$Dotnet) {
 }
 
 $app = Join-Path $PSScriptRoot 'Viewcut.csproj'
-$output = Join-Path $PSScriptRoot 'artifacts\Viewcut'
+$Output = [IO.Path]::GetFullPath($Output)
 $dependencies = @('mpv\libmpv-2.dll', 'ffmpeg\ffmpeg.exe', 'ffmpeg\ffprobe.exe')
 foreach ($dependency in $dependencies) {
     if (!(Test-Path -LiteralPath (Join-Path $Tools $dependency))) {

@@ -47,6 +47,8 @@ internal sealed class MainWindow : Form
         SuspendLayout();
         this.store = store;
         Text = "Viewcut";
+        var executable = Path.Combine(AppContext.BaseDirectory, "Viewcut.exe");
+        if (File.Exists(executable)) Icon = Icon.ExtractAssociatedIcon(executable);
         ClientSize = new Size(1360, 800);
         MinimumSize = new Size(860, 490);
         StartPosition = FormStartPosition.CenterScreen;

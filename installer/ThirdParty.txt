@@ -1,0 +1,22 @@
+Viewcut uses the following third-party components.
+
+.NET Desktop Runtime
+https://github.com/dotnet/runtime
+https://github.com/dotnet/winforms
+
+libmpv
+https://github.com/mpv-player/mpv
+Test build and build scripts:
+https://github.com/shinchiro/mpv-winbuild-cmake/releases/tag/20261106
+https://github.com/shinchiro/mpv-winbuild-cmake
+https://github.com/mpv-player/mpv/tree/902818753849d9ad8f0096fad6ca5aeaa37113b9
+
+FFmpeg and FFprobe
+https://ffmpeg.org/
+Test build and source information:
+https://www.gyan.dev/ffmpeg/builds/
+https://github.com/FFmpeg/FFmpeg/commit/946fcce07b
+See FFmpeg-LICENSE.txt.
+
+Inno Setup Simplified Chinese translation maintained by Zhenghan Yang
+https://github.com/jrsoftware/issrc/blob/is-6_7_4/Files/Languages/Unofficial/ChineseSimplified.isl
