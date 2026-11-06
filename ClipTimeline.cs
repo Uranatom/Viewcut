@@ -282,6 +282,7 @@ internal sealed class ClipTimeline : Control
         var minimum = viewLength * Scale(70) / Math.Max(1, track.Width);
         var decade = Math.Pow(10, Math.Floor(Math.Log10(minimum)));
         var step = (minimum <= decade ? 1 : minimum <= 2 * decade ? 2 : minimum <= 5 * decade ? 5 : 10) * decade;
+        var lastLabelEnd = int.MinValue;
         for (var tick = Math.Ceiling(viewStart / step) * step; tick <= viewStart + viewLength; tick += step)
         {
             var x = (int)X(tick);
@@ -291,8 +292,10 @@ internal sealed class ClipTimeline : Control
             var label = clock.ToString(format, CultureInfo.InvariantCulture);
             var width = TextRenderer.MeasureText(g, label, Font, Size.Empty, TextFormatFlags.NoPadding).Width;
             var left = Math.Min(x + Scale(3), track.Right - width);
+            if (left < lastLabelEnd + Scale(8)) continue;
             DrawText(g, label, new Rectangle(left, 0, width + Scale(2), track.Top - Scale(5)), EditorTheme.Muted,
                 TextFormatFlags.VerticalCenter);
+            lastLabelEnd = left + width;
         }
     }
 

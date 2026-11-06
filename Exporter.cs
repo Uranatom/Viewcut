@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
-using System.Text.Json;
 
 namespace Viewcut;
 
@@ -22,7 +21,6 @@ internal sealed class Exporter(string toolsDirectory)
         var extension = Path.GetExtension(job.Source).ToLowerInvariant();
         if (extension is not (".mp4" or ".mov"))
             throw new InvalidDataException("首版支持导出 MP4 和 MOV。");
-        if (job.Exact) await CheckExactInputAsync(job.Source, token).ConfigureAwait(false);
 
         var staging = Path.Combine(job.Folder, $".viewcut-{job.Id:N}.partial{extension}");
         var arguments = new List<string>
@@ -31,11 +29,7 @@ internal sealed class Exporter(string toolsDirectory)
             "-ss", Seconds(job.Start), "-i", job.Source, "-t", Seconds(job.End - job.Start),
             "-map", "0:V:0", "-map", "0:a?", "-map_chapters", "-1"
         };
-        if (job.Exact)
-            arguments.AddRange(["-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p",
-                "-c:a", "aac", "-b:a", "192k"]);
-        else
-            arguments.AddRange(["-c", "copy", "-avoid_negative_ts", "make_zero"]);
+        arguments.AddRange(["-c", "copy", "-avoid_negative_ts", "make_zero"]);
         arguments.Add(staging);
 
         try
@@ -55,28 +49,13 @@ internal sealed class Exporter(string toolsDirectory)
         }
     }
 
-    private async Task CheckExactInputAsync(string source, CancellationToken token)
-    {
-        var json = await RunAsync(ffprobe,
-            ["-v", "error", "-select_streams", "V:0", "-show_entries", "stream=pix_fmt,color_transfer",
-                "-of", "json", source], token).ConfigureAwait(false);
-        using var document = JsonDocument.Parse(json);
-        var video = document.RootElement.GetProperty("streams").EnumerateArray().FirstOrDefault();
-        if (video.ValueKind != JsonValueKind.Object)
-            throw new InvalidDataException("源文件没有可用的视频轨。");
-        if (!video.TryGetProperty("pix_fmt", out var pixelFormat)
-            || pixelFormat.GetString() is not ("yuv420p" or "yuvj420p")
-            || (video.TryGetProperty("color_transfer", out var transfer) && transfer.GetString() is "smpte2084" or "arib-std-b67"))
-            throw new InvalidDataException("按标记导出仅支持 8 位 SDR 4:2:0 素材。此片段可用无损快切。");
-    }
-
     private async Task CheckOutputAsync(string output, CancellationToken token)
     {
         var packets = await RunAsync(ffprobe,
             ["-v", "error", "-select_streams", "V:0", "-read_intervals", "%+#1",
                 "-show_entries", "packet=flags", "-of", "csv=p=0", output], token).ConfigureAwait(false);
         if (!packets.TrimStart().StartsWith('K'))
-            throw new InvalidDataException("导出结果没有可独立播放的起始视频包，请改用按标记导出或调整起点。");
+            throw new InvalidDataException("导出结果没有可独立播放的起始视频包，请调整起点后重试。");
     }
 
     private static string Publish(ExportJob job, string staging, string extension)

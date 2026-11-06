@@ -23,18 +23,15 @@ await Run(ffmpeg, "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=3840x
 
 var stamp = SourceStamp.Read(source);
 var exporter = new Exporter(tools);
-var fast = new ExportJob(source, stamp, output, 1.8, 4.2, false);
-var exact = new ExportJob(source, stamp, output, 1.8, 4.2, true);
+var fast = new ExportJob(source, stamp, output, 1.8, 4.2);
 var firstOutput = await exporter.ExportAsync(fast, CancellationToken.None);
-var secondOutput = await exporter.ExportAsync(exact, CancellationToken.None);
+var secondOutput = await exporter.ExportAsync(fast, CancellationToken.None);
 Assert(firstOutput != secondOutput, "Repeated names get a suffix");
 foreach (var clip in new[] { firstOutput, secondOutput })
     await Run(ffmpeg, "-v", "error", "-xerror", "-i", clip, "-f", "null", "-");
 var fastLength = await Duration(firstOutput);
-var exactLength = await Duration(secondOutput);
 Assert(fastLength > 2.4 && fastLength < 4.5, $"Fast cut keeps keyframe lead-in ({fastLength:F3}s)");
-Assert(Math.Abs(exactLength - 2.4) < 0.07, $"Exact cut duration ({exactLength:F3}s)");
-var hevc = new ExportJob(second, SourceStamp.Read(second), output, 0.5, 2.5, false);
+var hevc = new ExportJob(second, SourceStamp.Read(second), output, 0.5, 2.5);
 var hevcOutput = await exporter.ExportAsync(hevc, CancellationToken.None);
 await Run(ffmpeg, "-v", "error", "-xerror", "-i", hevcOutput, "-f", "null", "-");
 Assert(Path.GetExtension(hevcOutput) == ".mov", "Silent HEVC MOV can be cut and decoded");
@@ -52,13 +49,28 @@ var state = Path.Combine(directory, "state", "session.json");
 var store = new SessionStore(state);
 store.Data.Destination = output;
 store.Data.Jobs.Add(fast with { State = JobState.Done, Output = firstOutput });
-store.Data.Jobs.Add(exact with { State = JobState.Running });
+store.Data.Jobs.Add(fast with { State = JobState.Running });
 store.Data.Jobs.Add(hevc);
 store.Save();
 var restored = new SessionStore(state).Data;
 Assert(restored.Destination == output && restored.Jobs[0].Output == firstOutput
     && restored.Jobs[1].State == JobState.Failed && restored.Jobs[2].State == JobState.Waiting,
     "Saved clips, interrupted tasks, and pending tasks restore");
+var legacyPath = Path.Combine(directory, "legacy.json");
+var legacy = new
+{
+    Destination = output,
+    Jobs = new[]
+    {
+        new { fast.Source, fast.Stamp, fast.Folder, fast.Start, fast.End, Exact = true, fast.Id, ClipId = (Guid?)null, State = 0 }
+    }
+};
+File.WriteAllText(legacyPath, System.Text.Json.JsonSerializer.Serialize(legacy));
+var migrated = new SessionStore(legacyPath);
+Assert(migrated.Data.Clips.Count == 1 && migrated.Data.Clips[0].Id == fast.Id
+    && migrated.Data.Jobs[0].State == JobState.Failed, "Old markers migrate to drafts without silently exporting");
+migrated.Save();
+Assert(new SessionStore(legacyPath).Data.Clips.Count == 1, "Migration runs once");
 
 var thread = new Thread(() =>
 {
@@ -89,11 +101,13 @@ var thread = new Thread(() =>
 
     var uiStore = new SessionStore(Path.Combine(directory, "ui", "session.json"));
     uiStore.Data.Destination = output;
-    using var app = new MainWindow(uiStore, source) { ShowInTaskbar = false, Opacity = 0 };
+    using var app = new MainWindow(uiStore, directory) { ShowInTaskbar = false, Opacity = 0 };
     var controls = Descendants(app).ToArray();
-    var list = controls.OfType<ListView>().Single(list => list.Columns[0].Text == "素材");
+    var browser = controls.OfType<FileBrowser>().Single();
+    var list = controls.OfType<ListView>().Single(list => list.AccessibleName == "文件浏览器");
     var markIn = controls.OfType<Button>().Single(button => button.Text == "I  起点");
-    var markOut = controls.OfType<Button>().Single(button => button.Text == "O  保存片段");
+    var markOut = controls.OfType<Button>().Single(button => button.Text == "O  终点");
+    var export = controls.OfType<Button>().Single(button => button.Text == "导出当前素材全部片段");
     var playPause = controls.OfType<Button>().Single(button => button.Text == "暂停");
     var previous = controls.OfType<Button>().Single(button => button.Text == "P  上一条");
     var timeline = controls.OfType<ClipTimeline>().Single();
@@ -103,8 +117,53 @@ var thread = new Thread(() =>
     {
         try
         {
-            await WaitForUi(() => list.VirtualListSize == 2 && labels.Any(label => label.Text.Contains("/ 00:00:09")));
-            Assert(list.SelectedIndices.Count == 1, "File activation selects the source in the folder list");
+            await WaitForUi(() => browser.CurrentFolder == directory && list.VirtualListSize >= 2);
+            Assert(app.Text == "Viewcut", "Opening a folder only browses its contents");
+            var sourceIndex = Enumerable.Range(0, list.VirtualListSize).Single(index => list.Items[index].Text == Path.GetFileName(source));
+            list.SelectedIndices.Add(sourceIndex);
+            await Task.Delay(150);
+            Assert(app.Text == "Viewcut", "Selecting a video once does not load it");
+            ActivateEntry();
+            await WaitForUi(() => app.Text.Contains("相机 素材.mp4") && labels.Any(label => label.Text.Contains("/ 00:00:09")));
+            Console.WriteLine("PASS: Double-click file activation loads the selected video");
+            Assert(!controls.OfType<Button>().Any(button => button.Text is "打开视频" or "打开文件夹" or "X  跳过")
+                && !controls.OfType<CheckBox>().Any(), "Removed toolbar actions and export mode are absent");
+
+            browser.SetView(false);
+            Assert(list.View == View.Details, "Browser switches to list view");
+            Snapshot("browser-list.png");
+            var searchBox = controls.OfType<TextBox>().Single(box => box.AccessibleName == "搜索当前文件夹");
+            searchBox.Text = "相机";
+            Assert(list.VirtualListSize == 1 && list.Items[0].Text == Path.GetFileName(source), "Browser filters names in the current directory");
+            searchBox.Clear();
+            browser.SetView(true);
+            Assert(list.View == View.LargeIcon, "Browser switches to large icons");
+            Snapshot("browser-icons.png");
+            var title = app.Text;
+            await browser.NavigateAsync(output);
+            Assert(browser.CurrentFolder == output && app.Text == title, "Browsing another folder keeps the loaded video");
+            await browser.NavigateAsync(directory, source);
+            await browser.NavigateAsync(output);
+            var back = controls.OfType<Button>().Single(button => button.AccessibleName == "后退");
+            back.PerformClick();
+            await WaitForUi(() => browser.CurrentFolder == directory);
+            var forward = controls.OfType<Button>().Single(button => button.AccessibleName == "前进");
+            forward.PerformClick();
+            await WaitForUi(() => browser.CurrentFolder == output);
+            await browser.NavigateAsync(directory, source);
+            Console.WriteLine("PASS: Browser back and forward navigation");
+
+            var divider = controls.OfType<SidebarDivider>().Single();
+            var columns = (TableLayoutPanel)divider.Parent!;
+            var oldFraction = columns.ColumnStyles[2].Width;
+            typeof(Control).GetMethod("OnMouseDown", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(divider, [new MouseEventArgs(MouseButtons.Left, 1, 2, 25, 0)]);
+            typeof(Control).GetMethod("OnMouseMove", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(divider, [new MouseEventArgs(MouseButtons.Left, 1, -80, 25, 0)]);
+            typeof(Control).GetMethod("OnMouseUp", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(divider, [new MouseEventArgs(MouseButtons.Left, 1, 2, 25, 0)]);
+            Assert(columns.ColumnStyles[2].Width > oldFraction, "Dragging the sidebar divider changes the width");
+
             playPause.PerformClick();
             await WaitForUi(() => playPause.Text == "播放");
             var timeLabel = labels.Single(label => label.Text.Contains("/ 00:00:09"));
@@ -115,12 +174,14 @@ var thread = new Thread(() =>
             await WaitForUi(() => labels.Any(label => label.Text.Contains("已标记起点")));
             await JumpTo(1.5);
             markOut.PerformClick();
-            await WaitForUi(() => uiStore.Data.Jobs.Count == 1);
+            await WaitForUi(() => uiStore.Data.Clips.Count == 1);
             await JumpTo(3.1);
             markIn.PerformClick();
             await JumpTo(4.0);
             markOut.PerformClick();
-            await WaitForUi(() => uiStore.Data.Jobs.Count == 2 && uiStore.Data.Jobs.All(job => job.State == JobState.Done));
+            await WaitForUi(() => uiStore.Data.Clips.Count == 2);
+            await Task.Delay(200);
+            Assert(uiStore.Data.Jobs.Count == 0, "Marking multiple clips does not create export tasks");
             Assert(uiStore.Data.LatestClips(source, stamp).Length == 2, "Two clips appear as separate ranges");
 
             var beforeHover = CurrentTime();
@@ -128,15 +189,15 @@ var thread = new Thread(() =>
             await WaitForUi(() => PreviewMatches(2.45));
             Assert(CurrentTime() == beforeHover, "Hover decodes its frame without moving the main playhead");
 
-            var original = uiStore.Data.Jobs[0];
+            var original = uiStore.Data.Clips[0];
             Mouse("Down", original.Start, Scale(40), MouseButtons.Left);
             Mouse("Move", 0.76, Scale(40), MouseButtons.Left);
             await WaitForUi(() => PreviewMatches(0.76));
-            Assert(uiStore.Data.Jobs.Count == 2, "Dragging previews the new start before saving");
+            Assert(uiStore.Data.Jobs.Count == 0, "Dragging previews the new start without exporting");
             Mouse("Up", 0.76, Scale(40), MouseButtons.Left);
-            await WaitForUi(() => uiStore.Data.Jobs.Count == 3);
+            await WaitForUi(() => uiStore.Data.Clips[0].Start != original.Start);
             var adjusted = uiStore.Data.LatestClips(source, stamp)[0];
-            Assert(adjusted.ClipId == original.Id && Math.Abs(adjusted.Start - 0.76) < 0.05 && adjusted.End == original.End,
+            Assert(adjusted.Id == original.Id && Math.Abs(adjusted.Start - 0.76) < 0.05 && adjusted.End == original.End,
                 "Dragging the start handle updates only the start of the same clip");
 
             Mouse("Down", adjusted.End, Scale(40), MouseButtons.Left);
@@ -148,22 +209,46 @@ var thread = new Thread(() =>
                 "Dragging the end handle updates only the end of the same clip");
             LeaveTimeline();
             Assert(app.OwnedForms.OfType<FramePreview>().All(frame => !frame.Visible), "Preview closes when the pointer leaves");
-            Assert(File.Exists(original.Output), "Resizing keeps the earlier exported file");
+            Assert(uiStore.Data.Jobs.Count == 0, "Adjusting both handles only changes saved draft ranges");
             using (var screenshot = new Bitmap(app.Width, app.Height))
             {
                 app.DrawToBitmap(screenshot, new Rectangle(0, 0, app.Width, app.Height));
                 screenshot.Save(Path.Combine(directory, "editor.png"));
             }
 
+            var newDirectory = Path.Combine(directory, "批量导出");
+            Directory.CreateDirectory(newDirectory);
+            uiStore.Data.Destination = newDirectory;
+            Assert(Directory.GetFiles(newDirectory).Length == 0, "No outputs exist before clicking batch export");
+            export.PerformClick();
+            Assert(uiStore.Data.Jobs.Count == 2, "One click queues every clip of the current source");
+            export.PerformClick();
+            Assert(uiStore.Data.Jobs.Count == 2, "Repeated clicks cannot duplicate pending tasks");
+            var batch = uiStore.Data.Jobs.ToArray();
             previous.PerformClick();
-            await WaitForUi(() => app.Text.Contains("HEVC") && revised.State is JobState.Done or JobState.Failed);
-            Assert(revised.State == JobState.Done && File.Exists(revised.Output),
-                $"Main window exports an edited clip while switching files ({revised.Error})");
+            await WaitForUi(() => app.Text.Contains("HEVC") && batch.All(job => job.State is JobState.Done or JobState.Failed));
+            Assert(batch.All(job => job.State == JobState.Done && File.Exists(job.Output)), "Batch export completes while switching files");
+            Assert(batch[0].Start == revised.Start && batch[0].End == revised.End, "Batch export uses the final edited boundaries");
             var latest = new SessionStore(Path.Combine(directory, "ui", "session.json")).Data.LatestClips(source, stamp);
-            Assert(latest.Length == 2 && latest[0].Id == revised.Id, "The timeline restores only the latest revision of each clip");
+            Assert(latest.Length == 2 && latest[0] == revised, "Draft markers restore independently of exported snapshots");
             app.ActivateInput(directory);
-            await WaitForUi(() => list.VirtualListSize == 2 && app.Text.Contains("HEVC"));
-            Console.WriteLine("PASS: Folder activation loads its supported videos");
+            await WaitForUi(() => browser.CurrentFolder == directory);
+            Assert(app.Text.Contains("HEVC"), "Folder activation does not automatically start a video");
+            var restoredUi = new SessionStore(Path.Combine(directory, "ui", "session.json"));
+            Assert(restoredUi.Data.SidebarFraction > 0.4 && restoredUi.Data.BrowserLargeIcons, "Browser and sidebar preferences persist");
+            var frozenStart = batch[0].Start;
+            uiStore.Data.Clips[0] = revised with { Start = revised.Start + 0.1 };
+            Assert(batch[0].Start == frozenStart, "Editing a draft cannot mutate an already queued batch");
+
+            void ActivateEntry() => typeof(ListView).GetMethod("OnItemActivate", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(list, [EventArgs.Empty]);
+
+            void Snapshot(string filename)
+            {
+                using var screenshot = new Bitmap(app.Width, app.Height);
+                app.DrawToBitmap(screenshot, new Rectangle(0, 0, app.Width, app.Height));
+                screenshot.Save(Path.Combine(directory, filename));
+            }
 
             async Task JumpTo(double seconds)
             {

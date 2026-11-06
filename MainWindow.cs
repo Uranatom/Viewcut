@@ -11,7 +11,7 @@ internal sealed class MainWindow : Form
     private readonly System.Windows.Forms.Timer timer = new() { Interval = 32 };
     private readonly Panel video = new() { Dock = DockStyle.Fill, BackColor = Color.Black };
     private readonly ClipTimeline timeline = new();
-    private readonly ListView files = CreateList(("素材", 227), ("状态", 75));
+    private readonly FileBrowser browser = new();
     private readonly ListView clips = CreateList(("片段", 62), ("时间范围", 240));
     private readonly ListView jobs = CreateList(("状态", 72), ("导出范围", 230));
     private readonly Label time = new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleRight };
@@ -19,8 +19,7 @@ internal sealed class MainWindow : Form
     private readonly Label status = new() { Dock = DockStyle.Fill, AutoEllipsis = true, TextAlign = ContentAlignment.MiddleLeft,
         ForeColor = EditorTheme.Muted };
     private readonly Button pause = Button("暂停");
-    private readonly CheckBox exact = new() { Text = "按标记导出", AutoSize = true, FlatStyle = FlatStyle.Flat,
-        Margin = new Padding(10, 9, 2, 0) };
+    private readonly Button exportAll = Button("导出当前素材全部片段");
     private readonly Button retry = Button("重试选中任务");
     private readonly Button[] sectionButtons;
     private readonly Control[] sections;
@@ -29,16 +28,13 @@ internal sealed class MainWindow : Form
     private FramePreview? preview;
     private Task? worker;
     private string? current;
-    private string? directory;
     private SourceStamp? sourceStamp;
     private string[] sources = [];
-    private ExportJob[] clipJobs = [];
+    private ClipDraft[] clipDrafts = [];
     private ClipRange[] ranges = [];
     private Guid? selectedClip;
-    private int folderRequest;
     private double? start;
     private double mediaDuration;
-    private bool selectingFile;
     private bool selectingClip;
     private bool opening;
     private bool closing;
@@ -47,26 +43,29 @@ internal sealed class MainWindow : Form
     {
         this.store = store;
         Text = "Viewcut";
-        ClientSize = new Size(1216, 750);
-        MinimumSize = new Size(960, 550);
+        ClientSize = new Size(1360, 800);
+        MinimumSize = new Size(1024, 600);
         StartPosition = FormStartPosition.CenterScreen;
         AutoScaleMode = AutoScaleMode.Dpi;
-        Font = new Font("Segoe UI", 9);
+        Font = new Font("Segoe UI Variable Text", 9);
         BackColor = EditorTheme.Background;
         ForeColor = EditorTheme.Text;
-        time.Font = new Font("Consolas", 11);
+        time.Font = new Font("Segoe UI Variable Text", 10);
         time.ForeColor = EditorTheme.Accent;
         time.BackColor = EditorTheme.Surface;
         time.Padding = new Padding(8, 0, 8, 0);
         time.Text = "00:00:00.00 / 00:00:00.00";
         mediaName.Padding = new Padding(11, 0, 11, 0);
 
-        var split = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 1, ColumnCount = 2, Margin = Padding.Empty };
-        split.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        split.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 332));
+        var fraction = double.IsFinite(store.Data.SidebarFraction) ? Math.Clamp(store.Data.SidebarFraction, 0.28, 0.62) : 0.4;
+        var split = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 1, ColumnCount = 3, Margin = Padding.Empty,
+            AccessibleName = "播放器与文件浏览器布局" };
+        split.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, (float)(100 * (1 - fraction))));
+        split.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 7));
+        split.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, (float)(100 * fraction)));
         split.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         var playback = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1,
-            BackColor = EditorTheme.Surface, Margin = new Padding(0, 0, 8, 0) };
+            BackColor = EditorTheme.Surface, Margin = Padding.Empty };
         playback.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         playback.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         video.Margin = Padding.Empty;
@@ -79,8 +78,8 @@ internal sealed class MainWindow : Form
         exportPage.Controls.Add(jobs);
         retry.Dock = DockStyle.Bottom;
         exportPage.Controls.Add(retry);
-        sections = [files, clips, exportPage];
-        sectionButtons = [Button("素材", () => ShowSection(0)), Button("片段", () => ShowSection(1)),
+        sections = [browser, clips, exportPage];
+        sectionButtons = [Button("文件", () => ShowSection(0)), Button("片段", () => ShowSection(1)),
             Button("导出", () => ShowSection(2))];
         var sectionNav = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false,
             Margin = Padding.Empty, Padding = new Padding(6, 2, 0, 0) };
@@ -93,20 +92,24 @@ internal sealed class MainWindow : Form
         sidebar.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         sidebar.Controls.Add(sectionNav, 0, 0);
         sidebar.Controls.Add(sectionBody, 0, 1);
-        split.Controls.Add(sidebar, 1, 0);
+        split.Controls.Add(sidebar, 2, 0);
+        split.Controls.Add(new SidebarDivider(split, value =>
+        {
+            store.Data.SidebarFraction = value;
+            Save();
+        }), 1, 0);
         ShowSection(0);
 
         var toolbar = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Margin = Padding.Empty };
-        var wordmark = new Label { Text = "Viewcut", AutoSize = true, Font = new Font("Segoe UI Semibold", 16),
-            Margin = new Padding(0, 2, 18, 0), ForeColor = EditorTheme.Accent };
-        toolbar.Controls.AddRange([wordmark, Button("打开视频", ChooseFile), Button("打开文件夹", ChooseFolder),
-            Button("选择保存目录", ChooseDestination), Button("打开保存目录", OpenDestination)]);
+        var wordmark = new Label { Text = "Viewcut", AutoSize = true, Font = new Font("Segoe UI Variable Display Semib", 16),
+            Margin = new Padding(0, 2, 18, 0), ForeColor = EditorTheme.Text };
+        toolbar.Controls.AddRange([wordmark, Button("选择保存目录", ChooseDestination), Button("打开保存目录", OpenDestination)]);
 
         var transport = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Margin = Padding.Empty };
-        var save = Button("O  保存片段", MarkEnd);
-        Emphasize(save, true);
+        exportAll.Click += (_, _) => ExportCurrent();
+        Emphasize(exportAll, true);
         transport.Controls.AddRange([pause, Button("P  上一条", () => MoveFile(-1)), Button("N  下一条", () => MoveFile(1)),
-            Button("I  起点", MarkStart), save, Button("X  跳过", Skip), exact]);
+            Button("I  起点", MarkStart), Button("O  终点", MarkEnd)]);
         var transportBar = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 1, ColumnCount = 2, Margin = Padding.Empty };
         transportBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         transportBar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 236));
@@ -117,7 +120,7 @@ internal sealed class MainWindow : Form
         var timelineHeader = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Margin = Padding.Empty };
         timelineHeader.Controls.AddRange([
             new Label { Text = "片段时间轴", AutoSize = true, Margin = new Padding(12, 9, 15, 0), ForeColor = EditorTheme.Text },
-            Button("−", () => timeline.Zoom(1.5)), Button("+", () => timeline.Zoom(0.67)), Button("全览", timeline.Fit),
+            Button("−", () => timeline.Zoom(1.5)), Button("+", () => timeline.Zoom(0.67)), Button("全览", timeline.Fit), exportAll,
             new Label { Text = "悬停预览　·　滚轮缩放　·　Shift + 滚轮平移", AutoSize = true,
                 ForeColor = EditorTheme.Muted, Margin = new Padding(12, 9, 0, 0) }
         ]);
@@ -142,15 +145,20 @@ internal sealed class MainWindow : Form
         layout.Controls.Add(status, 0, 4);
         Controls.Add(layout);
 
-        files.RetrieveVirtualItem += (_, e) =>
+        browser.SetView(store.Data.BrowserLargeIcons, notify: false);
+        browser.VideoActivated += path =>
         {
-            var path = sources[e.ItemIndex];
-            e.Item = new ListViewItem([Path.GetFileName(path), FileState(path)]) { ToolTipText = path };
+            sources = browser.VideoFiles;
+            OpenFile(path);
+            timeline.Focus();
         };
-        files.SelectedIndexChanged += (_, _) =>
+        browser.PreferencesChanged += () =>
         {
-            if (!selectingFile && files.SelectedIndices.Count == 1)
-                OpenFile(sources[files.SelectedIndices[0]]);
+            store.Data.BrowserFolder = browser.CurrentFolder;
+            store.Data.BrowserLargeIcons = browser.LargeIcons;
+            if (string.Equals(Path.GetDirectoryName(current), browser.CurrentFolder, StringComparison.OrdinalIgnoreCase))
+                sources = browser.VideoFiles;
+            Save();
         };
         jobs.RetrieveVirtualItem += (_, e) =>
         {
@@ -166,9 +174,8 @@ internal sealed class MainWindow : Form
         clips.RetrieveVirtualItem += (_, e) =>
         {
             var clip = ranges[e.ItemIndex];
-            var job = clipJobs[e.ItemIndex];
             e.Item = new ListViewItem([$"{clip.Number:D2}", $"{Clock(clip.Start)}  →  {Clock(clip.End)}"])
-                { ToolTipText = JobLabel(job.State) + "  ·  " + Clock(clip.End - clip.Start) };
+                { ToolTipText = ClipState(clipDrafts[e.ItemIndex]) + "  ·  " + Clock(clip.End - clip.Start) };
         };
         clips.SelectedIndexChanged += (_, _) =>
         {
@@ -189,16 +196,15 @@ internal sealed class MainWindow : Form
         timeline.PreviewRequested += PreviewAt;
         Deactivate += (_, _) => timeline.CancelGesture();
         timer.Tick += (_, _) => UpdatePlayback();
-        exact.CheckedChanged += (_, _) => SetStatus(exact.Checked
-            ? "按标记导出会重编码片段，支持 8 位 SDR 4:2:0。"
-            : "无损快切会从附近的前一个关键帧开始，导出起点可能提前。");
         FormClosing += HandleClosing;
         Shown += (_, _) =>
         {
             timer.Start();
             RefreshJobs();
-            SetStatus("打开一条视频或文件夹开始粗筛。");
+            SetStatus("在右侧浏览文件夹，双击视频开始粗筛。");
             if (input is not null) ActivateInput(input);
+            else _ = browser.NavigateAsync(store.Data.BrowserFolder
+                ?? Environment.GetFolderPath(Environment.SpecialFolder.MyVideos));
             StartQueue();
         };
     }
@@ -211,7 +217,8 @@ internal sealed class MainWindow : Form
         if (string.IsNullOrWhiteSpace(path)) return;
         if (Directory.Exists(path))
         {
-            _ = LoadFolderAsync(path, true);
+            ShowSection(0);
+            _ = browser.NavigateAsync(path);
             return;
         }
         if (!File.Exists(path) || !IsVideo(path))
@@ -221,37 +228,9 @@ internal sealed class MainWindow : Form
         }
         OpenFile(path);
         var parent = Path.GetDirectoryName(path)!;
-        if (!string.Equals(directory, parent, StringComparison.OrdinalIgnoreCase))
-            _ = LoadFolderAsync(parent, false);
-        else SelectCurrent();
-    }
-
-    private async Task LoadFolderAsync(string path, bool openFirst)
-    {
-        var request = ++folderRequest;
-        directory = null;
-        ReplaceSources([]);
-        try
-        {
-            var results = await Task.Run(() => Directory.EnumerateFiles(path).Where(IsVideo)
-                .Order(StringComparer.OrdinalIgnoreCase).ToArray());
-            if (closing || request != folderRequest) return;
-            directory = path;
-            ReplaceSources(results);
-            if (openFirst && results.Length > 0)
-                OpenFile(results[0]);
-            else if (results.Length == 0)
-                SetStatus("此文件夹里没有 MP4 或 MOV 视频。");
-            SelectCurrent();
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            if (!closing && request == folderRequest)
-            {
-                directory = null;
-                SetStatus($"读取文件夹失败：{ex.Message}");
-            }
-        }
+        if (!string.Equals(browser.CurrentFolder, parent, StringComparison.OrdinalIgnoreCase))
+            _ = browser.NavigateAsync(parent, path);
+        else browser.SelectPath(path);
     }
 
     private static bool IsVideo(string path) => Path.GetExtension(path).ToLowerInvariant() is ".mp4" or ".mov";
@@ -293,14 +272,14 @@ internal sealed class MainWindow : Form
             return;
         }
         OpenFile(sources[index]);
-        SelectCurrent();
+        browser.SelectPath(current);
     }
 
     private void MarkStart()
     {
         if (!CanMark()) return;
         start = player!.Position;
-        SetStatus($"已标记起点 {Clock(start.Value)}。按 O 保存这段。");
+        SetStatus($"已标记起点 {Clock(start.Value)}，按 O 标记终点。");
     }
 
     private void MarkEnd()
@@ -312,24 +291,17 @@ internal sealed class MainWindow : Form
             SetStatus("先按 I 标记起点，再在更晚的画面按 O。");
             return;
         }
-        var path = current!;
-        var stamp = sourceStamp!;
-        var precise = exact.Checked;
-        if (store.Data.Destination is null) ChooseDestination();
-        if (store.Data.Destination is not { } destination || closing) return;
-
-        var job = new ExportJob(path, stamp, destination, from, end, precise);
-        store.Data.Jobs.Add(job);
+        var clip = new ClipDraft(current!, sourceStamp!, from, end);
+        store.Data.Clips.Add(clip);
         if (!Save())
         {
-            store.Data.Jobs.RemoveAt(store.Data.Jobs.Count - 1);
+            store.Data.Clips.RemoveAt(store.Data.Clips.Count - 1);
             return;
         }
         start = null;
-        selectedClip = job.Id;
-        SetStatus($"片段 {Clock(from)}–{Clock(end)} 已排队。");
-        RefreshJobs();
-        StartQueue();
+        selectedClip = clip.Id;
+        SetStatus($"已标记片段 {Clock(from)}–{Clock(end)}，选完后点击导出。");
+        RefreshClips();
     }
 
     private bool CanMark()
@@ -340,13 +312,20 @@ internal sealed class MainWindow : Form
         return false;
     }
 
-    private void Skip()
+    private void ExportCurrent()
     {
-        if (current is null || sourceStamp is null) return;
-        store.Data.Skipped[current] = sourceStamp;
-        if (!Save()) return;
-        files.Invalidate();
-        MoveFile(1);
+        if (current is not { } path || sourceStamp is not { } stamp || clipDrafts.Length == 0) return;
+        if (store.Data.Destination is null) ChooseDestination();
+        if (store.Data.Destination is not { } folder || closing) return;
+        var batch = store.Data.QueueExport(path, stamp, folder);
+        if (!Save())
+        {
+            foreach (var job in batch) store.Data.Jobs.Remove(job);
+            return;
+        }
+        SetStatus(batch.Length > 0 ? $"已提交当前素材的 {batch.Length} 个片段。无损快切的起点可能提前至关键帧。" : "这些片段已在队列中。");
+        RefreshJobs();
+        StartQueue();
     }
 
     private void StartQueue()
@@ -424,7 +403,7 @@ internal sealed class MainWindow : Form
         if (opening && engine.Position > 0)
         {
             opening = false;
-            SetStatus("按 I 标记起点，按 O 保存片段。");
+            SetStatus("按 I / O 标记片段，选完后点击导出当前素材全部片段。");
         }
         pause.Text = engine.Paused ? "播放" : "暂停";
         timeline.UpdateCursor(engine.Position, start);
@@ -445,45 +424,39 @@ internal sealed class MainWindow : Form
 
     private void AdjustClip(ClipRange edited)
     {
-        var previous = clipJobs.FirstOrDefault(job => (job.ClipId ?? job.Id) == edited.Id);
+        var previous = clipDrafts.FirstOrDefault(clip => clip.Id == edited.Id);
         if (previous is null || edited.End <= edited.Start) return;
-        var queue = store.Data.Jobs;
-        var index = queue.IndexOf(previous);
-        var updateQueued = previous.State == JobState.Waiting;
+        var drafts = store.Data.Clips;
+        var index = drafts.IndexOf(previous);
         var updated = previous with
         {
             Start = edited.Start,
-            End = edited.End,
-            Id = updateQueued ? previous.Id : Guid.NewGuid(),
-            ClipId = edited.Id,
-            Output = null,
-            Error = null,
-            State = JobState.Waiting
+            End = edited.End
         };
-        if (updateQueued) queue[index] = updated;
-        else queue.Add(updated);
-
+        drafts[index] = updated;
         if (!Save())
         {
-            if (updateQueued) queue[index] = previous;
-            else queue.RemoveAt(queue.Count - 1);
+            drafts[index] = previous;
+            RefreshClips();
             return;
         }
-        SetStatus($"片段 {edited.Number} 已更新并加入导出队列。");
-        RefreshJobs();
-        StartQueue();
+        SetStatus($"已调整片段 {edited.Number}，点击导出应用当前范围。");
+        RefreshClips();
     }
 
     private void RefreshClips()
     {
         selectingClip = true;
         clips.VirtualListSize = 0;
-        clipJobs = store.Data.LatestClips(current, sourceStamp);
-        ranges = clipJobs.Select((job, index) => new ClipRange(job.ClipId ?? job.Id, index + 1, job.Start, job.End)).ToArray();
+        clipDrafts = store.Data.LatestClips(current, sourceStamp);
+        ranges = clipDrafts.Select((clip, index) => new ClipRange(clip.Id, index + 1, clip.Start, clip.End)).ToArray();
         clips.VirtualListSize = ranges.Length;
         selectingClip = false;
         sectionButtons[1].Text = ranges.Length == 0 ? "片段" : $"片段  {ranges.Length}";
         SelectClip(selectedClip);
+        exportAll.Enabled = clipDrafts.Any(clip => store.Data.ExportFor(clip, store.Data.Destination)
+            is not { State: JobState.Waiting or JobState.Running });
+        exportAll.Text = ranges.Length == 0 ? "导出当前素材全部片段" : $"导出当前素材全部片段 ({ranges.Length})";
     }
 
     private void SelectClip(Guid? id, bool reveal = false)
@@ -510,37 +483,8 @@ internal sealed class MainWindow : Form
         }
     }
 
-    private void ReplaceSources(string[] result)
-    {
-        selectingFile = true;
-        files.VirtualListSize = 0;
-        sources = result;
-        files.VirtualListSize = sources.Length;
-        selectingFile = false;
-    }
-
-    private void SelectCurrent()
-    {
-        var index = Array.FindIndex(sources, path => string.Equals(path, current, StringComparison.OrdinalIgnoreCase));
-        selectingFile = true;
-        files.SelectedIndices.Clear();
-        if (index >= 0)
-        {
-            files.SelectedIndices.Add(index);
-            files.EnsureVisible(index);
-        }
-        selectingFile = false;
-    }
-
-    private string FileState(string path)
-    {
-        var related = store.Data.Jobs.Where(job => string.Equals(job.Source, path, StringComparison.OrdinalIgnoreCase))
-            .GroupBy(job => job.ClipId ?? job.Id).Select(group => group.Last()).ToArray();
-        if (related.Any(job => job.State is JobState.Waiting or JobState.Running)) return "导出中";
-        if (related.Any(job => job.State == JobState.Failed)) return "有失败";
-        if (related.Any(job => job.State == JobState.Done)) return "已保存";
-        return store.Data.Skipped.ContainsKey(path) ? "已跳过" : "";
-    }
+    private string ClipState(ClipDraft clip) => store.Data.ExportFor(clip, store.Data.Destination) is { } job
+        ? JobLabel(job.State) : "待导出";
 
     private static string JobLabel(JobState state) => state switch
     {
@@ -554,7 +498,6 @@ internal sealed class MainWindow : Form
     {
         jobs.VirtualListSize = store.Data.Jobs.Count;
         jobs.Invalidate();
-        files.Invalidate();
         var active = store.Data.Jobs.Count(job => job.State is JobState.Waiting or JobState.Running);
         sectionButtons[2].Text = active == 0 ? "导出" : $"导出  {active}";
         UpdateRetry();
@@ -563,18 +506,6 @@ internal sealed class MainWindow : Form
 
     private void UpdateRetry() => retry.Enabled = jobs.SelectedIndices.Count == 1
         && store.Data.Jobs[jobs.SelectedIndices[0]].State == JobState.Failed;
-
-    private void ChooseFile()
-    {
-        using var dialog = new OpenFileDialog { Filter = "视频 (*.mp4;*.mov)|*.mp4;*.mov" };
-        if (dialog.ShowDialog(this) == DialogResult.OK) ActivateInput(dialog.FileName);
-    }
-
-    private void ChooseFolder()
-    {
-        using var dialog = new FolderBrowserDialog { Description = "选择素材文件夹" };
-        if (dialog.ShowDialog(this) == DialogResult.OK) ActivateInput(dialog.SelectedPath);
-    }
 
     private void ChooseDestination()
     {
@@ -586,7 +517,11 @@ internal sealed class MainWindow : Form
         if (dialog.ShowDialog(this) != DialogResult.OK) return;
         var before = store.Data.Destination;
         store.Data.Destination = dialog.SelectedPath;
-        if (Save()) SetStatus("保存目录已设定。");
+        if (Save())
+        {
+            SetStatus("保存目录已设定。");
+            RefreshClips();
+        }
         else store.Data.Destination = before;
     }
 
@@ -640,6 +575,7 @@ internal sealed class MainWindow : Form
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
         if (closing) return true;
+        if (browser.ContainsFocus) return base.ProcessCmdKey(ref msg, keyData);
         switch (keyData)
         {
             case Keys.Escape when timeline.CancelGesture(): return true;
@@ -648,7 +584,6 @@ internal sealed class MainWindow : Form
             case Keys.O: MarkEnd(); return true;
             case Keys.P: MoveFile(-1); return true;
             case Keys.N: MoveFile(1); return true;
-            case Keys.X: Skip(); return true;
             case Keys.Left when player is { Ready: true } left: left.Seek(left.Position - 3, true); return true;
             case Keys.Right when player is { Ready: true } right: right.Seek(right.Position + 3, true); return true;
             default: return base.ProcessCmdKey(ref msg, keyData);
@@ -665,11 +600,9 @@ internal sealed class MainWindow : Form
 
     private static Button Button(string label, Action? action = null)
     {
-        var button = new Button
+        var button = new FluentButton
         {
-            Text = label, AutoSize = true, FlatStyle = FlatStyle.Flat, Height = 29,
-            Padding = new Padding(8, 0, 8, 0), Margin = new Padding(1, 3, 5, 2),
-            Cursor = Cursors.Hand
+            Text = label
         };
         button.FlatAppearance.BorderColor = EditorTheme.Border;
         Emphasize(button, false);
@@ -679,9 +612,8 @@ internal sealed class MainWindow : Form
 
     private static void Emphasize(Button button, bool selected)
     {
-        button.BackColor = selected ? EditorTheme.Accent : EditorTheme.Raised;
-        button.ForeColor = selected ? EditorTheme.Background : EditorTheme.Text;
-        button.FlatAppearance.MouseOverBackColor = selected ? Color.FromArgb(145, 239, 222) : EditorTheme.Border;
+        if (button is FluentButton fluent) fluent.Emphasized = selected;
+        button.Invalidate();
     }
 
     private void DrawEmptyVideo(object? sender, PaintEventArgs e)
@@ -689,11 +621,11 @@ internal sealed class MainWindow : Form
         if (current is not null) return;
         var center = video.ClientRectangle;
         center.Height = Math.Max(0, center.Height - 24);
-        using var title = new Font("Segoe UI Semibold", 16);
+        using var title = new Font("Segoe UI Variable Text", 16);
         const TextFormatFlags flags = TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter;
         TextRenderer.DrawText(e.Graphics, "打开素材开始粗筛", title, center, EditorTheme.Text, flags);
         center.Offset(0, 32);
-        TextRenderer.DrawText(e.Graphics, "在播放器里看原片，在下方时间轴挑出要保留的画面。", Font, center, EditorTheme.Muted, flags);
+        TextRenderer.DrawText(e.Graphics, "在右侧文件浏览器中双击视频，然后用 I / O 标记片段。", Font, center, EditorTheme.Muted, flags);
     }
 
     private static ListView CreateList(params (string Label, int Width)[] columns)
