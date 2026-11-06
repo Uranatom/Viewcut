@@ -11,7 +11,7 @@ internal sealed record BrowserEntry(string Path, string Name, bool Directory, lo
 internal sealed partial class FileBrowser : UserControl
 {
     private readonly TextBox address = new() { Dock = DockStyle.Fill, BorderStyle = BorderStyle.None };
-    private readonly TextBox search = new() { Dock = DockStyle.Fill, BorderStyle = BorderStyle.None, PlaceholderText = "搜索当前文件夹" };
+    private readonly TextBox search = new() { Dock = DockStyle.Fill, BorderStyle = BorderStyle.None, PlaceholderText = L.T("搜索当前文件夹") };
     private readonly ListView entries = new() { Dock = DockStyle.Fill, VirtualMode = true, OwnerDraw = true,
         BorderStyle = BorderStyle.None, MultiSelect = true, HideSelection = false, ShowItemToolTips = true,
         LabelEdit = true, AllowDrop = true };
@@ -54,14 +54,14 @@ internal sealed partial class FileBrowser : UserControl
         ForeColor = EditorTheme.Text;
         address.BackColor = search.BackColor = EditorTheme.Raised;
         address.ForeColor = search.ForeColor = EditorTheme.Text;
-        address.AccessibleName = "文件夹地址";
-        search.AccessibleName = "搜索当前文件夹";
-        entries.AccessibleName = "文件浏览器";
+        address.AccessibleName = L.T("文件夹地址");
+        search.AccessibleName = L.T("搜索当前文件夹");
+        entries.AccessibleName = L.T("文件浏览器");
         entries.BackColor = places.BackColor = EditorTheme.Surface;
         entries.ForeColor = places.ForeColor = EditorTheme.Text;
-        entries.Columns.Add("名称", 210);
-        entries.Columns.Add("修改日期", 125);
-        entries.Columns.Add("大小", 80);
+        entries.Columns.Add(L.T("名称"), 210);
+        entries.Columns.Add(L.T("修改日期"), 125);
+        entries.Columns.Add(L.T("大小"), 80);
         entries.LargeImageList = tileSize;
         entries.TileSize = new Size(148, 130);
         entries.View = View.LargeIcon;
@@ -71,10 +71,10 @@ internal sealed partial class FileBrowser : UserControl
         places.DrawMode = TreeViewDrawMode.OwnerDrawAll;
         places.ShowNodeToolTips = true;
 
-        back = Icon("\uE72B", "后退", () => BrowseHistory(-1));
-        forward = Icon("\uE72A", "前进", () => BrowseHistory(1));
-        var up = Icon("\uE74A", "向上一级", Up);
-        var refresh = Icon("\uE72C", "刷新", () => _ = NavigateAsync(CurrentFolder));
+        back = Icon("\uE72B", L.T("后退"), () => BrowseHistory(-1));
+        forward = Icon("\uE72A", L.T("前进"), () => BrowseHistory(1));
+        var up = Icon("\uE74A", L.T("向上一级"), Up);
+        var refresh = Icon("\uE72C", L.T("刷新"), () => _ = NavigateAsync(CurrentFolder));
         var navigation = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink, Margin = Padding.Empty };
         navigation.Controls.AddRange([back, forward, up, refresh]);
@@ -85,13 +85,13 @@ internal sealed partial class FileBrowser : UserControl
         pathBar.Controls.Add(navigation, 0, 0);
         pathBar.Controls.Add(InputContainer(address), 1, 0);
 
-        large = Icon("\uE80A", "大图标", () => SetView(true));
-        details = Icon("\uE8FD", "列表", () => SetView(false));
+        large = Icon("\uE80A", L.T("大图标"), () => SetView(true));
+        details = Icon("\uE8FD", L.T("列表"), () => SetView(false));
         var viewBar = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink, Margin = Padding.Empty };
         viewBar.Controls.AddRange([
-            new Label { Text = "查看", AutoSize = true, ForeColor = EditorTheme.Muted, Margin = new Padding(3, 10, 8, 0) },
-            large, details, Icon("\uE712", "文件操作", () => ShowCommands())
+            new Label { Text = L.T("查看"), AutoSize = true, ForeColor = EditorTheme.Muted, Margin = new Padding(3, 10, 8, 0) },
+            large, details, Icon("\uE712", L.T("文件操作"), () => ShowCommands())
         ]);
         var commandBar = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = Padding.Empty, AutoSize = true };
         commandBar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
@@ -119,10 +119,10 @@ internal sealed partial class FileBrowser : UserControl
         Controls.Add(layout);
         info.ForeColor = EditorTheme.Muted;
 
-        AddPlace("主文件夹", Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
-        AddPlace("桌面", Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory));
-        AddPlace("视频", Environment.GetFolderPath(Environment.SpecialFolder.MyVideos));
-        var computer = places.Nodes.Add("此电脑");
+        AddPlace(L.T("主文件夹"), Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+        AddPlace(L.T("桌面"), Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory));
+        AddPlace(L.T("视频"), Environment.GetFolderPath(Environment.SpecialFolder.MyVideos));
+        var computer = places.Nodes.Add(L.T("此电脑"));
         foreach (var drive in DriveInfo.GetDrives()) AddPlace(drive.Name, drive.Name, computer);
         computer.Expand();
         places.AfterSelect += (_, e) =>
@@ -142,9 +142,9 @@ internal sealed partial class FileBrowser : UserControl
             if (updatingEntries) return;
             var selection = SelectedEntries;
             selectedPath = selection.FirstOrDefault()?.Path;
-            info.Text = selection.Length == 0 ? $"{visible.Length} 个项目"
-                : selection.Length == 1 ? $"{visible.Length} 个项目　|　{selection[0].Name}"
-                : $"{visible.Length} 个项目　|　已选择 {selection.Length} 项";
+            info.Text = selection.Length == 0 ? L.F("{0} 个项目", visible.Length)
+                : selection.Length == 1 ? L.F("{0} 个项目　|　{1}", visible.Length, selection[0].Name)
+                : L.F("{0} 个项目　|　已选择 {1} 项", visible.Length, selection.Length);
             entries.Invalidate();
         };
         entries.DrawItem += DrawEntry;
@@ -157,11 +157,11 @@ internal sealed partial class FileBrowser : UserControl
         };
         entries.HandleCreated += (_, _) =>
         {
-            SetWindowTheme(entries.Handle, "DarkMode_Explorer", null);
+            SetWindowTheme(entries.Handle, EditorTheme.IsLight ? "Explorer" : "DarkMode_Explorer", null);
             UpdateMetrics();
         };
         entries.SizeChanged += (_, _) => FitColumns();
-        places.HandleCreated += (_, _) => SetWindowTheme(places.Handle, "DarkMode_Explorer", null);
+        places.HandleCreated += (_, _) => SetWindowTheme(places.Handle, EditorTheme.IsLight ? "Explorer" : "DarkMode_Explorer", null);
         InitializeOperations();
         address.KeyDown += (_, e) =>
         {
@@ -180,7 +180,7 @@ internal sealed partial class FileBrowser : UserControl
         refreshTimer.Stop();
         navigating = true;
         var ticket = ++request;
-        info.Text = "正在读取文件夹…";
+        info.Text = L.T("正在读取文件夹…");
         try
         {
             path = Path.GetFullPath(path);
@@ -215,7 +215,7 @@ internal sealed partial class FileBrowser : UserControl
         {
             if (ticket != request || IsDisposed) return;
             address.Text = CurrentFolder ?? path;
-            info.Text = $"无法打开文件夹　{ex.Message}";
+            info.Text = L.F("无法打开文件夹　{0}", ex.Message);
         }
         finally { if (ticket == request) navigating = false; }
     }
@@ -242,7 +242,7 @@ internal sealed partial class FileBrowser : UserControl
         entries.VirtualListSize = visible.Length;
         FitColumns();
         SelectPath(selectedPath);
-        info.Text = $"{visible.Length} 个项目";
+        info.Text = L.F("{0} 个项目", visible.Length);
         updatingEntries = wasUpdating;
         entries.Invalidate();
     }
@@ -262,6 +262,32 @@ internal sealed partial class FileBrowser : UserControl
         playingPath = path;
         entries.Invalidate();
     }
+
+    public void ApplyPreferences()
+    {
+        L.ApplyTree(this);
+        EditorTheme.ApplyTree(this);
+        void TranslateNodes(TreeNodeCollection nodes)
+        {
+            foreach (TreeNode node in nodes)
+            {
+                if (L.Key(node.Text) is { } key) node.Text = L.T(key);
+                TranslateNodes(node.Nodes);
+            }
+        }
+        TranslateNodes(places.Nodes);
+        foreach (var button in Descendants(this).OfType<FluentButton>())
+            if (button.AccessibleName is { } name) tips.SetToolTip(button, name);
+        var count = entries.SelectedIndices.Count;
+        info.Text = operating ? L.T("正在处理文件…") : count > 0
+            ? L.F("{0} 个项目　|　已选择 {1} 项", visible.Length, count) : L.F("{0} 个项目", visible.Length);
+        FitColumns();
+        places.Invalidate();
+        entries.Invalidate();
+    }
+
+    private static IEnumerable<Control> Descendants(Control parent) => parent.Controls.Cast<Control>()
+        .SelectMany(child => new[] { child }.Concat(Descendants(child)));
 
     public void SetView(bool largeIcons, bool notify = true)
     {
@@ -325,7 +351,7 @@ internal sealed partial class FileBrowser : UserControl
         var iconBounds = new Rectangle(left, rect.Top, Scale(24), rect.Height);
         using var iconFont = new Font("Segoe Fluent Icons", Scale(16), GraphicsUnit.Pixel);
         TextRenderer.DrawText(e.Graphics, e.Node.Parent is not null ? "\uEDA2" : "\uE8B7", iconFont,
-            iconBounds, e.Node.Parent is not null ? EditorTheme.Muted : Color.FromArgb(255, 209, 93),
+            iconBounds, e.Node.Parent is not null ? EditorTheme.Muted : EditorTheme.Folder,
             TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
         var textLeft = iconBounds.Right + Scale(8);
         DrawText(e.Graphics, e.Node.Text, new Rectangle(textLeft, rect.Top, Math.Max(1, rect.Right - textLeft - Scale(4)), rect.Height), EditorTheme.Text);
@@ -338,7 +364,7 @@ internal sealed partial class FileBrowser : UserControl
         var selected = e.Item?.Selected == true;
         var cut = cutPaths.Contains(entry.Path);
         var playing = string.Equals(entry.Path, playingPath, StringComparison.OrdinalIgnoreCase);
-        using var background = new SolidBrush(selected ? EditorTheme.Border : playing ? Color.FromArgb(35, 51, 65) : EditorTheme.Surface);
+        using var background = new SolidBrush(selected ? EditorTheme.Border : playing ? EditorTheme.Playing : EditorTheme.Surface);
         var bounds = Rectangle.Inflate(e.Bounds, -Scale(3), -Scale(2));
         e.Graphics.FillRectangle(background, bounds);
         var scale = DeviceDpi / 96f;
@@ -360,7 +386,7 @@ internal sealed partial class FileBrowser : UserControl
         {
             using var iconFont = new Font("Segoe Fluent Icons", Scale(50), GraphicsUnit.Pixel);
             TextRenderer.DrawText(e.Graphics, entry.Directory ? "\uE8B7" : entry.Video ? "\uE714" : "\uE8A5", iconFont,
-                imageBounds, entry.Directory ? Color.FromArgb(255, 209, 93) : EditorTheme.Accent,
+                imageBounds, entry.Directory ? EditorTheme.Folder : EditorTheme.Accent,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
             if (entry.Video) RequestThumbnail(entry);
         }
@@ -380,7 +406,7 @@ internal sealed partial class FileBrowser : UserControl
     {
         var entry = visible[e.ItemIndex];
         var playing = string.Equals(entry.Path, playingPath, StringComparison.OrdinalIgnoreCase);
-        using var fill = new SolidBrush(e.Item?.Selected == true ? EditorTheme.Border : playing ? Color.FromArgb(35, 51, 65) : EditorTheme.Surface);
+        using var fill = new SolidBrush(e.Item?.Selected == true ? EditorTheme.Border : playing ? EditorTheme.Playing : EditorTheme.Surface);
         e.Graphics.FillRectangle(fill, e.Bounds);
         var bounds = e.Bounds;
         if (e.ColumnIndex == 0)
@@ -388,7 +414,7 @@ internal sealed partial class FileBrowser : UserControl
             using var iconFont = new Font("Segoe Fluent Icons", Scale(16), GraphicsUnit.Pixel);
             TextRenderer.DrawText(e.Graphics, entry.Directory ? "\uE8B7" : entry.Video ? "\uE714" : "\uE8A5",
                 iconFont, new Rectangle(bounds.X + Scale(4), bounds.Y, Scale(24), bounds.Height),
-                entry.Directory ? Color.FromArgb(255, 209, 93) : EditorTheme.Muted,
+                entry.Directory ? EditorTheme.Folder : EditorTheme.Muted,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
             bounds.X += Scale(34);
             bounds.Width -= Scale(34);

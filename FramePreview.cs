@@ -34,12 +34,18 @@ internal sealed class FramePreview : Form
         BackColor = EditorTheme.Border;
         ForeColor = EditorTheme.Text;
         clock.BackColor = EditorTheme.Surface;
-        AccessibleName = "时间轴画面预览";
+        AccessibleName = L.T("时间轴画面预览");
         Controls.Add(video);
         Controls.Add(clock);
     }
 
     protected override bool ShowWithoutActivation => true;
+
+    public void ApplyPreferences()
+    {
+        L.ApplyTree(this);
+        EditorTheme.ApplyTree(this);
+    }
 
     protected override CreateParams CreateParams
     {
@@ -61,7 +67,7 @@ internal sealed class FramePreview : Form
             Math.Clamp(anchor.Y - Height - 6, area.Top, Math.Max(area.Top, area.Bottom - Height)));
         if (Visible) return;
         nextSeek = Environment.TickCount64 + 55;
-        clock.Text = "正在定位画面…";
+        clock.Text = L.T("正在定位画面…");
         Opacity = owner.Opacity;
         Show(owner);
     }
@@ -83,7 +89,7 @@ internal sealed class FramePreview : Form
             engine.Poll();
             if (engine.Error is not null)
             {
-                clock.Text = "无法预览此位置";
+                clock.Text = L.T("无法预览此位置");
                 return;
             }
             if (engine.HasFrame && !engine.Seeking && now >= nextSeek && Math.Abs(issued - desired) >= 0.02)
@@ -93,11 +99,11 @@ internal sealed class FramePreview : Form
                 nextSeek = now + 65;
             }
             if (FramePosition is { } position)
-                clock.Text = "预览  " + TimeSpan.FromSeconds(position).ToString(@"hh\:mm\:ss\.ff", CultureInfo.InvariantCulture);
+                clock.Text = L.T("预览  ") + TimeSpan.FromSeconds(position).ToString(@"hh\:mm\:ss\.ff", CultureInfo.InvariantCulture);
         }
         catch (InvalidOperationException)
         {
-            clock.Text = "无法预览此位置";
+            clock.Text = L.T("无法预览此位置");
             nextSeek = now + 500;
         }
     }

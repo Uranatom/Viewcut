@@ -50,7 +50,7 @@ internal sealed class ShellMenu : IDisposable
     {
         if (reviewable)
         {
-            InsertMenu(menu, 0, 0x400, 0x7000, "在 Viewcut 中打开");
+            InsertMenu(menu, 0, 0x400, 0x7000, L.T("在 Viewcut 中打开"));
             InsertMenu(menu, 1, 0xC00, 0, null);
         }
         using var hook = new MenuHook(owner.FindForm()!.Handle, context);

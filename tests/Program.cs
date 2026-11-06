@@ -375,6 +375,7 @@ var thread = new Thread(() =>
 
             controls.OfType<Button>().Single(button => button.Text == "文件").PerformClick();
             await BrowserRegression.Run(app, browser, directory);
+            await PreferencesRegression.Run(app, uiStore, Path.Combine(directory, "ui", "session.json"));
 
             void ActivateEntry() => typeof(ListView).GetMethod("OnItemActivate", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(list, [EventArgs.Empty]);

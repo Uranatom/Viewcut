@@ -44,12 +44,12 @@ internal sealed class FluentButton : Button
         var scale = DeviceDpi / 96f;
         path.AddRoundedRectangle(rect, new SizeF(5 * scale, 5 * scale));
         var background = !Enabled ? EditorTheme.Raised : Emphasized ? EditorTheme.Accent
-            : pressed ? EditorTheme.Surface : hover ? Color.FromArgb(57, 57, 57) : BackColor;
+            : pressed ? EditorTheme.Surface : hover ? EditorTheme.Hover : BackColor;
         using var fill = new SolidBrush(background);
         using var border = new Pen(Focused ? EditorTheme.Text : pressed ? EditorTheme.Surface : EditorTheme.Border, scale);
         e.Graphics.FillPath(fill, path);
         e.Graphics.DrawPath(border, path);
-        var color = !Enabled ? EditorTheme.Muted : Emphasized ? EditorTheme.Surface : EditorTheme.Text;
+        var color = !Enabled ? EditorTheme.Muted : Emphasized ? EditorTheme.OnAccent : EditorTheme.Text;
         if (Glyph is not null)
         {
             using var font = new Font("Segoe Fluent Icons", 16 * scale, GraphicsUnit.Pixel);

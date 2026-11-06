@@ -16,7 +16,7 @@ internal sealed class SidebarDivider : Control
         Margin = Padding.Empty;
         Cursor = horizontal ? Cursors.SizeNS : Cursors.SizeWE;
         BackColor = EditorTheme.Background;
-        AccessibleName = horizontal ? "调整时间轴高度" : "调整侧边栏宽度";
+        AccessibleName = horizontal ? L.T("调整时间轴高度") : L.T("调整侧边栏宽度");
         Horizontal = horizontal;
     }
 

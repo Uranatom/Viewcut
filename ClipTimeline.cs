@@ -5,16 +5,12 @@ namespace Viewcut;
 
 internal sealed record ClipRange(Guid Id, int Number, double Start, double End, string? Name = null)
 {
-    public string DisplayName => string.IsNullOrWhiteSpace(Name) ? $"片段 {Number}" : Name;
+    public string DisplayName => string.IsNullOrWhiteSpace(Name) ? L.F("片段 {0}", Number) : Name;
 }
 
 internal sealed class ClipTimeline : Control
 {
-    private static readonly Color[] ClipColors =
-    [
-        EditorTheme.Accent, Color.FromArgb(148, 188, 246), Color.FromArgb(221, 169, 240),
-        Color.FromArgb(241, 190, 128)
-    ];
+    private static Color[] ClipColors => EditorTheme.ClipColors;
     private const double MinClip = 0.05;
 
     private IReadOnlyList<ClipRange> clips = [];
@@ -48,15 +44,15 @@ internal sealed class ClipTimeline : Control
         Dock = DockStyle.Fill;
         BackColor = EditorTheme.Surface;
         ForeColor = EditorTheme.Text;
-        AccessibleName = "片段时间轴";
-        AccessibleDescription = "点击定位，悬停预览。选中片段后拖动左右手柄。Ctrl 点击多选，Delete 或 Backspace 删除片段。滚轮缩放，Shift 加滚轮平移。";
+        AccessibleName = L.T("片段时间轴");
+        AccessibleDescription = L.T("点击定位，悬停预览。选中片段后拖动左右手柄。Ctrl 点击多选，Delete 或 Backspace 删除片段。滚轮缩放，Shift 加滚轮平移。");
         TabStop = true;
         AutoSize = true;
         MinimumSize = new Size(120, 106);
         SetStyle(ControlStyles.Selectable | ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint
             | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
-        clipMenu.Items.Add("重命名", null, (_, _) => RenameRequested?.Invoke(renameTarget));
-        clipMenu.Items.Add("删除", null, (_, _) => DeleteRequested?.Invoke());
+        clipMenu.Items.Add(L.T("重命名"), null, (_, _) => RenameRequested?.Invoke(renameTarget));
+        clipMenu.Items.Add(L.T("删除"), null, (_, _) => DeleteRequested?.Invoke());
     }
 
     public void SetMedia(double value)
@@ -138,7 +134,7 @@ internal sealed class ClipTimeline : Control
             if (!selectedIds.Contains(target.Id)) ClipSelected?.Invoke(target.Id, false);
             renameTarget = target.Id;
             clipMenu.Items[0].Enabled = selectedIds.Count == 1;
-            clipMenu.Items[1].Text = selectedIds.Count > 1 ? "删除选中片段" : "删除";
+            clipMenu.Items[1].Text = selectedIds.Count > 1 ? L.T("删除选中片段") : L.T("删除");
             clipMenu.Show(this, e.Location);
             return;
         }
@@ -283,7 +279,7 @@ internal sealed class ClipTimeline : Control
 
         if (duration <= 0)
         {
-            DrawText(g, "打开素材后，用 I / O 标记要保留的片段", track, EditorTheme.Muted,
+            DrawText(g, L.T("打开素材后，用 I / O 标记要保留的片段"), track, EditorTheme.Muted,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
             return;
         }
@@ -343,13 +339,13 @@ internal sealed class ClipTimeline : Control
         var right = (float)Math.Min(track.Right, end);
         var rect = new RectangleF(left, track.Top + Scale(4), Math.Max(1, right - left), track.Height - Scale(8));
         var color = ClipColors[(clip.Number - 1) % ClipColors.Length];
-        using var fill = new SolidBrush(Color.FromArgb(selected ? 205 : 97, color));
+        using var fill = new SolidBrush(Color.FromArgb(selected ? (EditorTheme.IsLight ? 255 : 205) : 97, color));
         using var border = new Pen(color, selected ? Scale(2) : 1);
         g.FillRectangle(fill, rect);
         g.DrawRectangle(border, rect.X, rect.Y, rect.Width, rect.Height);
         if (rect.Width > Scale(35))
             DrawText(g, clip.DisplayName, Rectangle.Round(RectangleF.Inflate(rect, -Scale(9), 0)),
-                selected ? EditorTheme.Background : EditorTheme.Text,
+                selected ? EditorTheme.OnAccent : EditorTheme.Text,
                 TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
         if (!selected) return;
         using var grip = new SolidBrush(color);

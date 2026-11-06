@@ -16,7 +16,10 @@ internal static class LayoutRegression
             Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            using var app = new MainWindow(new SessionStore(Path.Combine(output, "session.json")), mediaFolder)
+            var store = new SessionStore(Path.Combine(output, "session.json"));
+            store.Data.Language = Environment.GetEnvironmentVariable("VIEWCUT_TEST_LANGUAGE") ?? "zh-CN";
+            store.Data.Theme = Environment.GetEnvironmentVariable("VIEWCUT_TEST_THEME") ?? "dark";
+            using var app = new MainWindow(store, mediaFolder)
             {
                 ShowInTaskbar = false,
                 Opacity = 0
@@ -80,6 +83,7 @@ internal static class LayoutRegression
             using var screenshot = new Bitmap(app.Width, app.Height);
             app.DrawToBitmap(screenshot, new Rectangle(Point.Empty, screenshot.Size));
             screenshot.Save(Path.Combine(output, "layout.png"));
+            CheckPreferences(app, output);
         }
         var track = (Rectangle)typeof(ClipTimeline).GetProperty("Track", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(timeline)!;
         Require(track.Height >= timeline.Font.Height + app.DeviceDpi / 96d * 12, "Timeline clip text and handles fit vertically");
@@ -89,12 +93,34 @@ internal static class LayoutRegression
         var time = all.OfType<Label>().Single(label => label.Text.Contains(" / "));
         Require(time.Width >= TextRenderer.MeasureText(time.Text, time.Font).Width + time.Padding.Horizontal,
             "Full current position and duration fit");
-        var entries = all.OfType<ListView>().Single(control => control.AccessibleName == "文件浏览器");
+        var entries = all.OfType<ListView>().Single(control => control.AccessibleName == L.T("文件浏览器"));
         Require(entries.Columns.Cast<ColumnHeader>().Sum(column => column.Width) == entries.ClientSize.Width,
             "File header columns fill the available width");
         var clipped = all.Where(control => control.Visible && control.Parent is TableLayoutPanel or FlowLayoutPanel)
             .FirstOrDefault(control => control.Right > control.Parent!.ClientSize.Width + 1 || control.Bottom > control.Parent.ClientSize.Height + 1);
         Require(clipped is null, $"Controls stay inside their layouts{(clipped is null ? "" : $" ({clipped.GetType().Name} {clipped.Text} {clipped.Bounds} in {clipped.Parent!.ClientSize})")}");
+    }
+
+    private static void CheckPreferences(MainWindow app, string output)
+    {
+        using var dialog = new PreferencesDialog(_ => false, _ => false) { Opacity = 0 };
+        dialog.Show(app);
+        var dpi = app.DeviceDpi;
+        var children = Descendants(dialog).ToArray();
+        foreach (var control in children.Reverse()) SendDpiMessage(control.Handle, 0x02E2, (IntPtr)dpi, IntPtr.Zero);
+        var rectangle = new NativeRectangle { Right = 480 * dpi / 96, Bottom = 320 * dpi / 96 };
+        SendMessage(dialog.Handle, 0x02E0, (IntPtr)(dpi | (dpi << 16)), ref rectangle);
+        foreach (var control in children) SendDpiMessage(control.Handle, 0x02E3, (IntPtr)dpi, IntPtr.Zero);
+        dialog.ClientSize = new Size(480 * dpi / 96, 320 * dpi / 96);
+        dialog.PerformLayout();
+        foreach (var control in children) control.PerformLayout();
+        var clipped = children.FirstOrDefault(control => control.Visible && control.Parent is TableLayoutPanel or FlowLayoutPanel
+            && (control.Right > control.Parent.ClientSize.Width + 1 || control.Bottom > control.Parent.ClientSize.Height + 1));
+        Require(clipped is null, $"Preferences fit at {dpi} DPI{(clipped is null ? "" : $": {clipped.Text} {clipped.Bounds}")}");
+        using var screenshot = new Bitmap(dialog.Width, dialog.Height);
+        dialog.DrawToBitmap(screenshot, new Rectangle(Point.Empty, screenshot.Size));
+        screenshot.Save(Path.Combine(output, "preferences.png"));
+        dialog.Close();
     }
 
     private static void Require(bool condition, string description)

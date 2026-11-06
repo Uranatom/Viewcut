@@ -111,6 +111,7 @@ internal static class BrowserRegression
         {
             browser.SelectPath(file1);
             list.SelectedIndices.Add(2);
+            list.Focus();
             Key(Keys.Control | Keys.C);
             Assert(Clipboard.GetFileDropList().Cast<string>().ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals([file1, file2]),
                 "Ctrl+C writes interoperable file-drop clipboard data");

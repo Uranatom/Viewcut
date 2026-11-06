@@ -12,15 +12,15 @@ internal sealed class Exporter(string toolsDirectory)
     public async Task<string> ExportAsync(ExportJob job, CancellationToken token)
     {
         if (!double.IsFinite(job.Start) || !double.IsFinite(job.End) || job.Start < 0 || job.End <= job.Start)
-            throw new InvalidDataException("片段终点必须晚于起点。");
+            throw new InvalidDataException(L.T("片段终点必须晚于起点。"));
         if (SourceStamp.Read(job.Source) != job.Stamp)
-            throw new IOException("源视频已更换或修改，请重新标记片段。");
+            throw new IOException(L.T("源视频已更换或修改，请重新标记片段。"));
         if (!Directory.Exists(job.Folder))
-            throw new DirectoryNotFoundException($"无法访问目标目录：{job.Folder}");
+            throw new DirectoryNotFoundException(L.F("无法访问目标目录：{0}", job.Folder));
 
         var extension = Path.GetExtension(job.Source).ToLowerInvariant();
         if (extension is not (".mp4" or ".mov"))
-            throw new InvalidDataException("首版支持导出 MP4 和 MOV。");
+            throw new InvalidDataException(L.T("首版支持导出 MP4 和 MOV。"));
         if (job.Name is { } customName)
         {
             if (ClipNames.Validate(customName, job.Id, [], null, extension) is { } error)
@@ -45,7 +45,7 @@ internal sealed class Exporter(string toolsDirectory)
             await CheckOutputAsync(staging, token).ConfigureAwait(false);
             token.ThrowIfCancellationRequested();
             if (SourceStamp.Read(job.Source) != job.Stamp)
-                throw new IOException("导出期间源视频发生变化，请重新标记片段。");
+                throw new IOException(L.T("导出期间源视频发生变化，请重新标记片段。"));
             return Publish(job, staging, extension);
         }
         finally
@@ -62,7 +62,7 @@ internal sealed class Exporter(string toolsDirectory)
             ["-v", "error", "-select_streams", "V:0", "-read_intervals", "%+#1",
                 "-show_entries", "packet=flags", "-of", "csv=p=0", output], token).ConfigureAwait(false);
         if (!packets.TrimStart().StartsWith('K'))
-            throw new InvalidDataException("导出结果没有可独立播放的起始视频包，请调整起点后重试。");
+            throw new InvalidDataException(L.T("导出结果没有可独立播放的起始视频包，请调整起点后重试。"));
     }
 
     private static string Publish(ExportJob job, string staging, string extension)
@@ -98,7 +98,7 @@ internal sealed class Exporter(string toolsDirectory)
     {
         token.ThrowIfCancellationRequested();
         if (!File.Exists(executable))
-            throw new FileNotFoundException($"缺少 {Path.GetFileName(executable)}，请用带依赖的测试版本。");
+            throw new FileNotFoundException(L.F("缺少 {0}，请用带依赖的测试版本。", Path.GetFileName(executable)));
         var settings = new ProcessStartInfo(executable)
         {
             UseShellExecute = false,
@@ -109,7 +109,7 @@ internal sealed class Exporter(string toolsDirectory)
             StandardErrorEncoding = Encoding.UTF8
         };
         foreach (var argument in arguments) settings.ArgumentList.Add(argument);
-        using var process = Process.Start(settings) ?? throw new IOException("无法启动媒体工具。");
+        using var process = Process.Start(settings) ?? throw new IOException(L.T("无法启动媒体工具。"));
         var output = process.StandardOutput.ReadToEndAsync();
         var error = process.StandardError.ReadToEndAsync();
         try
@@ -128,7 +128,7 @@ internal sealed class Exporter(string toolsDirectory)
         var detail = (await error.ConfigureAwait(false)).Trim();
         var result = await output.ConfigureAwait(false);
         if (process.ExitCode != 0)
-            throw new IOException(detail.Length == 0 ? $"{Path.GetFileName(executable)} 退出代码：{process.ExitCode}" : detail);
+            throw new IOException(detail.Length == 0 ? L.F("{0} 退出代码：{1}", Path.GetFileName(executable), process.ExitCode) : detail);
         return result;
     }
 }

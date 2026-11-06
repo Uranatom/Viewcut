@@ -27,7 +27,7 @@ internal sealed partial class Player : IDisposable
     {
         this.preview = preview;
         handle = Create();
-        if (handle == IntPtr.Zero) throw new InvalidOperationException("无法创建播放引擎。");
+        if (handle == IntPtr.Zero) throw new InvalidOperationException(L.T("无法创建播放引擎。"));
         try
         {
             Set("wid", unchecked((uint)host.ToInt64()).ToString(CultureInfo.InvariantCulture));
@@ -170,11 +170,11 @@ internal sealed partial class Player : IDisposable
 
     private static void Check(int status)
     {
-        if (status < 0) throw new InvalidOperationException($"播放引擎：{ErrorText(status)}");
+        if (status < 0) throw new InvalidOperationException(L.F("播放引擎：{0}", ErrorText(status)));
     }
 
     private static string ErrorText(int code) =>
-        Marshal.PtrToStringUTF8(ErrorString(code)) ?? "未知播放错误";
+        Marshal.PtrToStringUTF8(ErrorString(code)) ?? L.T("未知播放错误");
 
     public void Dispose()
     {

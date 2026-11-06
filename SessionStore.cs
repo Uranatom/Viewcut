@@ -32,6 +32,8 @@ internal sealed record ExportJob(string Source, SourceStamp Stamp, string Folder
 internal sealed class Session
 {
     public int Version { get; set; }
+    public string Language { get; set; } = "zh-CN";
+    public string Theme { get; set; } = "dark";
     public string? Destination { get; set; }
     public string? BrowserFolder { get; set; }
     public bool BrowserLargeIcons { get; set; } = true;
@@ -91,7 +93,7 @@ internal sealed class SessionStore
         }
         catch (JsonException ex)
         {
-            throw new InvalidDataException($"无法读取粗筛记录，请检查文件：{this.path}", ex);
+            throw new InvalidDataException(L.F("无法读取粗筛记录，请检查文件：{0}", this.path), ex);
         }
 
         if (Data.Version == 0)
@@ -103,14 +105,14 @@ internal sealed class SessionStore
                 job.ClipId ??= job.Id;
                 if (job.State != JobState.Waiting) continue;
                 job.State = JobState.Failed;
-                job.Error = "旧版标记已恢复，请点击导出当前素材全部片段。";
+                job.Error = L.T("旧版标记已恢复，请点击导出当前素材全部片段。");
             }
         }
         Data.Version = 1;
         foreach (var job in Data.Jobs.Where(job => job.State == JobState.Running))
         {
             job.State = JobState.Failed;
-            job.Error = "上次导出中断。确认目标目录后可重试。";
+            job.Error = L.T("上次导出中断。确认目标目录后可重试。");
         }
     }
 

@@ -132,39 +132,39 @@ internal sealed partial class FileBrowser
             item.Enabled = enabled && !operating;
         }
         var any = SelectedEntries.Length > 0;
-        Add("剪切    Ctrl+X", () => CopySelection(true), any);
-        Add("复制    Ctrl+C", () => CopySelection(false), any);
-        Add("粘贴    Ctrl+V", () => _ = PasteAsync(), HasClipboardFiles());
-        Add("复制为路径    Ctrl+Shift+C", CopyPaths, any);
+        Add(L.T("剪切    Ctrl+X"), () => CopySelection(true), any);
+        Add(L.T("复制    Ctrl+C"), () => CopySelection(false), any);
+        Add(L.T("粘贴    Ctrl+V"), () => _ = PasteAsync(), HasClipboardFiles());
+        Add(L.T("复制为路径    Ctrl+Shift+C"), CopyPaths, any);
         commandMenu.Items.Add(new ToolStripSeparator());
-        Add("重命名    F2", RenameSelection, any);
-        Add("删除    Delete", () => _ = DeleteFilesAsync(false), any);
-        Add("新建文件夹    Ctrl+Shift+N", () => _ = NewFolderAsync(), CurrentFolder is not null);
-        Add("属性    Alt+Enter", ShowProperties, any);
+        Add(L.T("重命名    F2"), RenameSelection, any);
+        Add(L.T("删除    Delete"), () => _ = DeleteFilesAsync(false), any);
+        Add(L.T("新建文件夹    Ctrl+Shift+N"), () => _ = NewFolderAsync(), CurrentFolder is not null);
+        Add(L.T("属性    Alt+Enter"), ShowProperties, any);
         commandMenu.Items.Add(new ToolStripSeparator());
-        Add("全选    Ctrl+A", SelectAllEntries, visible.Length > 0);
-        Add("反向选择", () =>
+        Add(L.T("全选    Ctrl+A"), SelectAllEntries, visible.Length > 0);
+        Add(L.T("反向选择"), () =>
         {
             entries.BeginUpdate();
             updatingEntries = true;
             for (var index = 0; index < visible.Length; index++) entries.Items[index].Selected = !entries.Items[index].Selected;
             updatingEntries = false;
             entries.EndUpdate();
-            info.Text = $"{visible.Length} 个项目　|　已选择 {entries.SelectedIndices.Count} 项";
+            info.Text = L.F("{0} 个项目　|　已选择 {1} 项", visible.Length, entries.SelectedIndices.Count);
         });
-        var sort = new ToolStripMenuItem("排序");
+        var sort = new ToolStripMenuItem(L.T("排序"));
         foreach (var column in new[] { 0, 1, 2 })
         {
             var item = new ToolStripMenuItem(entries.Columns[column].Text) { Checked = sortColumn == column };
             item.Click += (_, _) => { sortColumn = column; ApplySort(); };
             sort.DropDownItems.Add(item);
         }
-        var descending = new ToolStripMenuItem("降序") { Checked = sortDescending };
+        var descending = new ToolStripMenuItem(L.T("降序")) { Checked = sortDescending };
         descending.Click += (_, _) => { sortDescending = !sortDescending; ApplySort(); };
         sort.DropDownItems.Add(descending);
         commandMenu.Items.Add(sort);
-        Add("刷新    F5", ScheduleRefresh);
-        Add("在 Windows 资源管理器中打开", () => { if (CurrentFolder is { } folder) OpenExternal(folder); });
+        Add(L.T("刷新    F5"), ScheduleRefresh);
+        Add(L.T("在 Windows 资源管理器中打开"), () => { if (CurrentFolder is { } folder) OpenExternal(folder); });
         commandMenu.Show(screen ?? entries.PointToScreen(new Point(8, 8)));
     }
 
@@ -196,10 +196,11 @@ internal sealed partial class FileBrowser
         {
             Clipboard.SetDataObject(FileData(paths, cut), true, 20, 100);
             cutPaths = cut ? paths.ToHashSet(StringComparer.OrdinalIgnoreCase) : new(StringComparer.OrdinalIgnoreCase);
-            info.Text = $"已{(cut ? "剪切" : "复制")} {paths.Length} 项，选择目标文件夹后粘贴。";
+            info.Text = cut ? L.F("已剪切 {0} 项，选择目标文件夹后粘贴。", paths.Length)
+                : L.F("已复制 {0} 项，选择目标文件夹后粘贴。", paths.Length);
             entries.Invalidate();
         }
-        catch (ExternalException) { info.Text = "剪贴板正被其他程序使用，请稍后重试。"; }
+        catch (ExternalException) { info.Text = L.T("剪贴板正被其他程序使用，请稍后重试。"); }
     }
 
     private void CopyPaths()
@@ -238,8 +239,8 @@ internal sealed partial class FileBrowser
     {
         var paths = SelectedEntries.Select(entry => entry.Path).ToArray();
         if (paths.Length == 0 || operating) return Task.FromResult(false);
-        if (permanently && MessageBox.Show(this, $"永久删除选中的 {paths.Length} 项？此操作不会移入回收站。",
-            "永久删除", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+        if (permanently && MessageBox.Show(this, L.F("永久删除选中的 {0} 项？此操作不会移入回收站。", paths.Length),
+            L.T("永久删除"), MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
             return Task.FromResult(false);
         return RunFileOperationAsync(permanently ? FileAction.Delete : FileAction.Recycle, paths);
     }
@@ -253,7 +254,7 @@ internal sealed partial class FileBrowser
         else if (selected.Length > 1)
         {
             using var dialog = new RenameClipDialog(Path.GetFileNameWithoutExtension(selected[0].Name), ValidateFileName,
-                "批量重命名", "名称", "文件将依次命名为“名称 (1)”“名称 (2)”等，文件扩展名保留。");
+                L.T("批量重命名"), L.T("名称"), L.T("文件将依次命名为“名称 (1)”“名称 (2)”等，文件扩展名保留。"));
             if (dialog.ShowDialog(this) == DialogResult.OK)
                 _ = RunFileOperationAsync(FileAction.Rename, selected.Select(entry => entry.Path).ToArray(), name: dialog.ClipName);
         }
@@ -262,9 +263,9 @@ internal sealed partial class FileBrowser
     private async Task NewFolderAsync()
     {
         if (CurrentFolder is not { } folder || operating) return;
-        var name = "新建文件夹";
+        var name = L.T("新建文件夹");
         for (var number = 2; Directory.Exists(Path.Combine(folder, name)) || File.Exists(Path.Combine(folder, name)); number++)
-            name = $"新建文件夹 ({number})";
+            name = L.F("新建文件夹 ({0})", number);
         if (await RunFileOperationAsync(FileAction.NewFolder, [], folder, name) && CurrentFolder == folder)
         {
             SelectPath(Path.Combine(folder, name));
@@ -275,12 +276,12 @@ internal sealed partial class FileBrowser
     private static string? ValidateFileName(string? name)
     {
         if (string.IsNullOrWhiteSpace(name) || name is "." or ".." || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0
-            || name.EndsWith('.') || name.EndsWith(' ')) return "请输入有效的文件或文件夹名称。";
+            || name.EndsWith('.') || name.EndsWith(' ')) return L.T("请输入有效的文件或文件夹名称。");
         var stem = name.Split('.')[0];
         if (new[] { "CON", "PRN", "AUX", "NUL" }.Contains(stem, StringComparer.OrdinalIgnoreCase)
             || (stem.Length == 4 && (stem.StartsWith("COM", StringComparison.OrdinalIgnoreCase)
                 || stem.StartsWith("LPT", StringComparison.OrdinalIgnoreCase)) && stem[3] is >= '1' and <= '9'))
-            return "该名称是 Windows 保留名称，请使用其他名称。";
+            return L.T("该名称是 Windows 保留名称，请使用其他名称。");
         return null;
     }
 
@@ -296,7 +297,7 @@ internal sealed partial class FileBrowser
     {
         if (operating) return false;
         operating = true;
-        info.Text = "正在处理文件…";
+        info.Text = L.T("正在处理文件…");
         try { return await ShellFiles.ExecuteAsync(FindForm()!.Handle, action, paths, destination, name); }
         catch (Exception ex) when (ex is COMException or IOException or UnauthorizedAccessException or ArgumentException)
         { if (!IsDisposed) ShowFileError(ex.Message); return false; }
@@ -375,7 +376,7 @@ internal sealed partial class FileBrowser
             watcher.EnableRaisingEvents = true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
-        { info.Text = "自动刷新不可用，可按 F5 刷新。"; }
+        { info.Text = L.T("自动刷新不可用，可按 F5 刷新。"); }
     }
 
     private void ScheduleRefresh()
@@ -385,7 +386,7 @@ internal sealed partial class FileBrowser
         refreshTimer.Start();
     }
 
-    private void ShowFileError(string error) => MessageBox.Show(this, error, "文件操作未完成", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+    private void ShowFileError(string error) => MessageBox.Show(this, error, L.T("文件操作未完成"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
 
     private void OpenExternal(string path)
     {

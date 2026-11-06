@@ -33,7 +33,7 @@ internal static class Program
             }
             catch (Exception ex) when (ex is IOException or TimeoutException)
             {
-                MessageBox.Show("无法联系正在运行的 Viewcut。请稍后再试。", "Viewcut");
+                MessageBox.Show(L.T("无法联系正在运行的 Viewcut。请稍后再试。"), "Viewcut");
             }
             return;
         }
@@ -51,7 +51,7 @@ internal static class Program
         catch (Exception ex)
         {
             Environment.ExitCode = 1;
-            MessageBox.Show(ex.Message, "Viewcut 启动失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show(ex.Message, L.T("Viewcut 启动失败"), MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally { mutex.ReleaseMutex(); }
     }
