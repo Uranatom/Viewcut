@@ -28,8 +28,10 @@ try{
   await script("document.querySelector('#player').currentTime=arguments[0]",[end]);await until(()=>script("const v=document.querySelector('#player');return !v.seeking&&Math.abs(v.currentTime-arguments[0])<.1",[end]));await click('markOut');
  }
  assert.equal(await script("return document.querySelectorAll('.segment').length"),2);
- await script("const e=document.querySelector('#track'),r=e.getBoundingClientRect();e.dispatchEvent(new PointerEvent('pointermove',{clientX:r.x+r.width*.4,clientY:r.y+50,bubbles:true}));");
- await until(()=>script("const c=document.querySelector('#preview canvas');return !document.querySelector('#preview').hidden&&c.getContext('2d').getImageData(0,0,c.width,c.height).data.some((n,i)=>i%4!==3&&n>10)"));
+ const pointer=await script("const r=document.querySelector('#track').getBoundingClientRect();return {x:Math.round(r.x+r.width*.4),y:Math.round(r.y+45)}");
+ await request('POST',`/session/${session}/actions`,{actions:[{type:'pointer',id:'mouse',parameters:{pointerType:'mouse'},actions:[{type:'pointerMove',duration:150,origin:'viewport',x:pointer.x,y:pointer.y}]}]});
+ await until(()=>script("const c=document.querySelector('#preview canvas');return !document.querySelector('#preview').hidden&&Math.abs(Number(c.dataset.frameTime)-2.4)<.15"));
+ const image=await request('GET',`/session/${session}/screenshot`);await writeFile(path.join(output,'Safari-preview.png'),Buffer.from(image,'base64'));
  await click('export');await until(()=>script("return document.querySelector('#downloadDialog').open"));
  await writeFile(path.join(output,'results.json'),JSON.stringify({browser:'Safari',capabilities:created.capabilities,status:'passed',tests:['H264 File playback','multiple clip marking','real frame preview','Worker remux and ZIP preparation'],nativePicker:'not automated',downloadSaveDialog:'not automated'},null,2));
  console.log('PASS real macOS Safari: H264 playback, multiple clips, frame preview, ZIP preparation');

@@ -250,16 +250,18 @@ function paintPreview() {
   const canvas = $('#preview canvas'), context = canvas.getContext('2d');
   if (!context) return false;
   context.fillStyle = '#000'; context.fillRect(0,0,canvas.width,canvas.height);
-  try { const scale = Math.min(canvas.width / previewVideo.videoWidth,canvas.height / previewVideo.videoHeight); const w = previewVideo.videoWidth * scale,h = previewVideo.videoHeight * scale; context.drawImage(previewVideo,(canvas.width-w)/2,(canvas.height-h)/2,w,h); return true; }
+  try { const scale = Math.min(canvas.width / previewVideo.videoWidth,canvas.height / previewVideo.videoHeight); const w = previewVideo.videoWidth * scale,h = previewVideo.videoHeight * scale; context.drawImage(previewVideo,(canvas.width-w)/2,(canvas.height-h)/2,w,h); canvas.dataset.frameTime = previewVideo.currentTime.toFixed(3); return true; }
   catch (error) { if (error.name !== 'InvalidStateError') throw error; return false; }
 }
 function pumpPreview() {
   if (previewBusy || previewTarget === null || !previewReady) return;
   if (Math.abs(previewVideo.currentTime - previewTarget) < .015 && previewVideo.readyState >= 2) { previewTarget = null; paintPreview(); return; }
-  previewBusy = true; const at = previewTarget; previewTarget = null; previewVideo.currentTime = at;
+  previewBusy = true; const at = previewTarget; previewTarget = null;
+  try { previewVideo.currentTime = at; }
+  catch (error) { previewBusy = false; previewTarget = at; if (error.name !== 'InvalidStateError') throw error; }
 }
 previewVideo.onloadedmetadata = () => { previewReady = true; };
-previewVideo.onseeked = () => { previewBusy = false; paintPreview(); if (previewVideo.requestVideoFrameCallback) previewVideo.requestVideoFrameCallback(() => paintPreview()); pumpPreview(); };
+previewVideo.onseeked = () => { previewBusy = false; paintPreview(); if (previewVideo.requestVideoFrameCallback && previewVideo.readyState >= 2) previewVideo.requestVideoFrameCallback(() => paintPreview()); pumpPreview(); };
 previewVideo.onloadeddata = previewVideo.oncanplay = () => { paintPreview(); pumpPreview(); };
 player.onloadedmetadata = () => { duration = player.duration; if (!Number.isFinite(duration) || duration <= 0) { report(new Error('unsupportedPlayback')); return; } sourceReady = true; renderTimeline(); buttons(); status(t('ready')); };
 player.onerror = () => { sourceReady = false; status(t('unsupportedPlayback')); buttons(); };
