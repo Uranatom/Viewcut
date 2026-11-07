@@ -15,6 +15,7 @@ let editor = new Editor(), active = null, sourceKey = '', url = null, destinatio
 let history = [], historyAt = -1, fileClipboard = null, busyFiles = false, exportWorker = null, jobs = [], duration = 0, zoom = 1, saveTimer, previewTarget = null, previewBusy = false, loadTicket = 0, folderTicket = 0, sourceReady = false, previewReady = false;
 let rootId = '', knownRoots, browsing = 0;
 let downloadUrl = null, downloadFilename = '';
+let previewPrimed = false, previewPriming = false;
 async function rootIdentity(handle) {
   if (handle.virtual) return 'import:' + handle.name;
   knownRoots ??= await loadHandle('knownRoots').catch(() => []) || [];
@@ -160,7 +161,7 @@ async function openVideo(entry) {
   persist(); player.pause(); sourceReady = false; previewReady = false; active = { entry,file }; duration = 0;
   sourceKey = JSON.stringify([rootId, entry.file?.webkitRelativePath || entry.name, ...folders.slice(1).map(f => f.name),file.size,file.lastModified]);
   editor = editors.get(sourceKey) || new Editor(drafts[sourceKey]?.clips || []); editor.mark = null; zoom = 1; viewport.scrollLeft = 0;
-  if (url) URL.revokeObjectURL(url); url = URL.createObjectURL(file); player.src = url; previewVideo.src = url; previewTarget = null; previewBusy = false;
+  if (url) URL.revokeObjectURL(url); url = URL.createObjectURL(file); player.src = url; previewVideo.src = url; previewTarget = null; previewBusy = false; previewPrimed = previewPriming = false;
   $('#preview').hidden = true;
   $('#empty').hidden = true; $('#mediaName').textContent = $('#activeName').textContent = file.name; document.title = `Viewcut · ${file.name}`; status(t('loading')); renderAll();
 }
@@ -241,7 +242,6 @@ track.onkeydown = event => {
 };
 viewport.onwheel = event => { if (!sourceReady) return; event.preventDefault(); if (event.shiftKey) viewport.scrollLeft += event.deltaY + event.deltaX; else changeZoom(zoom * Math.exp(-event.deltaY * .002),event.clientX - viewport.getBoundingClientRect().left); };
 function showPreview(at,x) {
-  if (!previewReady) return;
   const e = $('#preview'); e.hidden = false; e.style.left = Math.max(4,Math.min(x - 121,innerWidth - 248)) + 'px'; e.style.top = Math.max(4,Math.min(track.getBoundingClientRect().top - 174,innerHeight - 180)) + 'px';
   e.querySelector('output').textContent = format(at); previewTarget = Math.min(at,Math.max(0,duration - .001)); pumpPreview();
 }
@@ -254,13 +254,18 @@ function paintPreview() {
   catch (error) { if (error.name !== 'InvalidStateError') throw error; return false; }
 }
 function pumpPreview() {
-  if (previewBusy || previewTarget === null || !previewReady) return;
-  if (Math.abs(previewVideo.currentTime - previewTarget) < .015 && previewVideo.readyState >= 2) { previewTarget = null; paintPreview(); return; }
+  if (previewBusy || previewPriming || previewTarget === null || !previewReady) return;
+  if (previewPrimed && Math.abs(previewVideo.currentTime - previewTarget) < .015 && previewVideo.readyState >= 2) { previewTarget = null; paintPreview(); return; }
   previewBusy = true; const at = previewTarget; previewTarget = null;
   try { previewVideo.currentTime = at; }
-  catch (error) { previewBusy = false; previewTarget = at; if (error.name !== 'InvalidStateError') throw error; }
+  catch (error) { previewBusy = false; previewTarget = at; if (error.name !== 'InvalidStateError') throw error; return; }
+  if (!previewPrimed) {
+    const generation = loadTicket; previewPriming = true;
+    previewVideo.play().then(() => { if (generation !== loadTicket) return; previewVideo.pause(); previewPrimed = true; previewPriming = false; paintPreview(); pumpPreview(); })
+      .catch(() => { if (generation === loadTicket) { previewPriming = false; previewBusy = false; paintPreview(); } });
+  }
 }
-previewVideo.onloadedmetadata = () => { previewReady = true; };
+previewVideo.onloadedmetadata = () => { previewReady = true; pumpPreview(); };
 previewVideo.onseeked = () => { previewBusy = false; paintPreview(); if (previewVideo.requestVideoFrameCallback && previewVideo.readyState >= 2) previewVideo.requestVideoFrameCallback(() => paintPreview()); pumpPreview(); };
 previewVideo.onloadeddata = previewVideo.oncanplay = () => { paintPreview(); pumpPreview(); };
 player.onloadedmetadata = () => { duration = player.duration; if (!Number.isFinite(duration) || duration <= 0) { report(new Error('unsupportedPlayback')); return; } sourceReady = true; renderTimeline(); buttons(); status(t('ready')); };
