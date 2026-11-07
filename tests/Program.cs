@@ -158,6 +158,20 @@ var thread = new Thread(() =>
             await WaitForUi(() => app.Text.Contains("相机 素材.mp4") && labels.Any(label => label.Text.Contains("/ 00:00:09")));
             Assert(labels.Any(label => label.Text == "正在处理\n" + Path.GetFileName(source)), "Sidebar identifies the active video");
             Console.WriteLine("PASS: Double-click file activation loads the selected video");
+            var surface = controls.Single(control => control.Name == "videoSurface");
+            Assert(surface.AllowDrop, "Player surface accepts external video drops");
+            async Task DropVideo(string file)
+            {
+                var data = new DataObject(DataFormats.FileDrop, new[] { file });
+                var drop = new DragEventArgs(data, 0, 10, 10, DragDropEffects.Copy, DragDropEffects.None);
+                typeof(Control).GetMethod("OnDragEnter", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(surface, [drop]);
+                Assert(drop.Effect == DragDropEffects.Copy, "Video drop advertises opening without moving the source");
+                typeof(Control).GetMethod("OnDragDrop", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(surface, [drop]);
+                await WaitForUi(() => app.Text.Contains(Path.GetFileName(file)) && typeof(MainWindow).GetField("player", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(app) is Player p && p.Ready);
+            }
+            await DropVideo(second);
+            await DropVideo(source);
+            Assert(SourceStamp.Read(source) == stamp, "Dropping a video loads it and preserves the original file");
             Assert(!controls.OfType<Button>().Any(button => button.Text is "打开视频" or "打开文件夹" or "X  跳过")
                 && !controls.OfType<CheckBox>().Any(), "Removed toolbar actions and export mode are absent");
 

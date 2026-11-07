@@ -10,6 +10,7 @@ export const strings = {
 };
 export let language = 'zh-CN';
 Object.assign(strings,{
+  dropVideo:['松开鼠标以打开视频','Drop to open video'],loadingFolder:['正在打开文件夹，请稍候再操作。','Opening the folder. Try again when it finishes.'],
   browserDownloads:['保存到浏览器下载目录','Save to browser downloads'],
   browserDownloadsHelp:['此浏览器通过 ZIP 下载保存片段，保存位置由浏览器设置决定。','This browser saves clips as a ZIP download. Its settings control the save location.'],
   portableFolder:['已导入文件夹。此浏览器只读取源文件；片段将打包下载。','Folder imported. Source files are read-only; clips will download as a ZIP.'],

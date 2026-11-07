@@ -19,8 +19,9 @@ try{
  await script("const bytes=Uint8Array.from(atob(arguments[0]),c=>c.charCodeAt(0)),f=new File([bytes],'Safari camera.mp4',{type:'video/mp4'}),d=new DataTransfer();d.items.add(f);const e=document.querySelector('#fileInput');e.files=d.files;e.dispatchEvent(new Event('change',{bubbles:true}));",[b64]);
  await until(()=>script("return !document.querySelector('[data-action=markIn]').disabled"));
  for(const [start,end] of [[.5,1.8],[2.5,4.1]]){
-  await script("document.querySelector('#player').currentTime=arguments[0]",[start]);await wait(120);await script("document.querySelector('[data-action=markIn]').click()");
-  await script("document.querySelector('#player').currentTime=arguments[0]",[end]);await wait(120);await script("document.querySelector('[data-action=markOut]').click()");
+  await script("document.querySelector('#player').currentTime=arguments[0]",[start]);await until(()=>script("const v=document.querySelector('#player');return !v.seeking&&Math.abs(v.currentTime-arguments[0])<.1",[start]));await script("document.querySelector('[data-action=markIn]').click()");
+  await until(()=>script("return !document.querySelector('#markLine').hidden"));
+  await script("document.querySelector('#player').currentTime=arguments[0]",[end]);await until(()=>script("const v=document.querySelector('#player');return !v.seeking&&Math.abs(v.currentTime-arguments[0])<.1",[end]));await script("document.querySelector('[data-action=markOut]').click()");
  }
  assert.equal(await script("return document.querySelectorAll('.segment').length"),2);
  await script("const e=document.querySelector('#track'),r=e.getBoundingClientRect();e.dispatchEvent(new PointerEvent('pointermove',{clientX:r.x+r.width*.4,clientY:r.y+50,bubbles:true}));");

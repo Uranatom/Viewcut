@@ -1,14 +1,40 @@
-# Viewcut 0.6.0
+# Viewcut 0.6.1
 
 简体中文 · [English](README.en.md)
 
 Viewcut 是面向 Windows 10 22H2／Windows 11 x64 的本地视频粗筛工具。Windows 10 实机验收尚待完成，见 [兼容性说明](docs/windows-compatibility.md)。浏览相机或无人机的 MP4／MOV，标记要保留的片段，选完一条素材后一次导出到指定目录。
 
-## 试用
+## 最新版下载
 
-新增网页端：Windows 双击 `artifacts/WebLauncher/win-x64/Viewcut.Web.exe`，Mac 解压对应架构的运行包后双击 `Viewcut Web.app`，即自动打开浏览器。支持 Chrome／Edge，并为 Mac Safari 提供文件夹导入和 ZIP 导出。素材在本机处理，支持多片段编辑、预览和批量无损导出。网页端使用浏览器授权的目录，文件操作范围与 Windows Shell 有差异；操作、格式边界和测试方法见 [网页端说明](web/README.md)。
+| 版本 | 下载 |
+| --- | --- |
+| Windows 桌面版 · Win10 22H2 / Win11 x64 | [下载安装包](https://github.com/Uranatom/Viewcut/releases/latest/download/Viewcut-Setup-x64.exe) |
+| 网页版启动器 · Windows x64 | [下载单文件 EXE](https://github.com/Uranatom/Viewcut/releases/latest/download/Viewcut-Web-Windows.exe) |
+| 网页版启动器 · Mac Apple Silicon | [下载 Mac 应用](https://github.com/Uranatom/Viewcut/releases/latest/download/Viewcut-Web-macOS-AppleSilicon.zip) |
+| 网页版启动器 · Mac Intel | [下载 Mac 应用](https://github.com/Uranatom/Viewcut/releases/latest/download/Viewcut-Web-macOS-Intel.zip) |
 
-1. 运行 `artifacts\Setup\Viewcut-0.6.0-Setup-x64.exe`，选择安装位置和快捷方式，再从开始菜单打开 Viewcut。也可以直接运行 `artifacts\Viewcut\Viewcut.exe`。
+[全部发布文件与更新说明](https://github.com/Uranatom/Viewcut/releases/latest) · [自行部署的静态网页包](https://github.com/Uranatom/Viewcut/releases/latest/download/Viewcut-Web-Static.zip)
+
+## 桌面版 Quick Start
+
+1. 下载并运行 Windows 安装包，选择安装目录和是否创建桌面快捷方式，然后打开 Viewcut。
+2. **将 MP4 / MOV 直接拖到播放器区域**；也可在右侧文件页中双击视频。
+3. 用 Space 播放／暂停，按 **I** 标记起点、按 **O** 标记终点；重复操作可保留多个片段。O 只做标记，不会自动导出。
+4. 选择保存目录，点击时间轴右侧的**导出图标**，一次导出当前视频的全部片段。按钮名称和快捷键可通过鼠标悬停查看。
+
+## 网页版 Quick Start
+
+1. Windows 下载 `Viewcut-Web-Windows.exe`；Mac 下载对应架构的 ZIP 并解压，得到 `Viewcut Web.app`。
+2. **双击图标，浏览器界面自动打开**。不用启动 CMD，不用安装 Node 或 .NET，也不用手动输入网址。
+3. 将视频拖到播放器区域，或在右侧打开文件夹／视频。支持 Chrome、Edge 和 Mac Safari。
+4. 按 I / O 选择一个或多个片段，再点击导出。**Chrome / Edge** 可直接保存到授权目录；**Safari** 会准备一个 ZIP，点击下载后解压得到全部片段。
+5. Mac 用 **Command+点选**多选，**Command+Z** 撤销，**Command+Shift+Z** 重做。主题和语言在偏好设置中切换。
+
+视频始终在本机处理，不上传。Mac 启动包目前为未公证测试版，首次打开可能需要按系统安全提示允许；Mac 端的浏览器与验收范围见[启动器说明](launcher/README.md)。Windows 10 实机验收状态见[兼容性说明](docs/windows-compatibility.md)。
+
+## 详细操作
+
+1. 运行 `artifacts\Setup\Viewcut-0.6.1-Setup-x64.exe`，选择安装位置和快捷方式，再从开始菜单打开 Viewcut。也可以直接运行 `artifacts\Viewcut\Viewcut.exe`。
 2. 在右侧「文件」浏览文件夹。可用地址栏、常用位置或磁盘入口导航，支持后退、前进、上一级、刷新和当前目录搜索。「大图标」与「列表」按钮可切换视图。双击文件夹进入，双击 MP4／MOV 后加载到播放器。外部右键视频仍可直接播放，右键文件夹则打开文件浏览器。
 3. 用空格键播放／暂停，左右方向键跳转三秒。按 `I` 标记起点，按 `O` 标记终点，按 `N`／`P` 查看下一条／上一条。标记会自动保存，选完后点击「导出当前素材全部片段」开始批量导出，每段生成一个文件。首次导出时可选择保存目录。
 4. 时间轴上的色块代表要保留的片段。悬停在时间轴上可查看对应画面，点击可移动播放头。点选色块后拖动左、右手柄，预览会跟随边界。滚轮缩放时间轴，按住 Shift 滚轮平移，「全览」恢复整条素材。

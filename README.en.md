@@ -1,4 +1,4 @@
-# Viewcut 0.6.0
+# Viewcut 0.6.1
 
 English · [简体中文](README.md)
 
@@ -6,14 +6,37 @@ Viewcut is a lightweight video player and rough-cut tool targeting Windows 10 22
 camera or drone MP4/MOV footage, mark the parts worth keeping, and export all selected
 clips from a video in one batch.
 
-## Using Viewcut
+## Latest downloads
 
-Web app: double-click `Viewcut.Web.exe` on Windows or `Viewcut Web.app` on Mac. The launcher opens your browser automatically. Chrome/Edge support direct directory exports; Safari uses folder import and ZIP downloads.
-Videos stay on the device. The web app includes clip editing, previews and batch
-lossless export. Browser file permissions and codec support differ from the desktop
-app; see [web documentation](web/README.md) for usage, limitations and tests.
+| Edition | Download |
+| --- | --- |
+| Windows desktop · Win10 22H2 / Win11 x64 | [Setup wizard](https://github.com/Uranatom/Viewcut/releases/latest/download/Viewcut-Setup-x64.exe) |
+| Web launcher · Windows x64 | [Single-file EXE](https://github.com/Uranatom/Viewcut/releases/latest/download/Viewcut-Web-Windows.exe) |
+| Web launcher · Apple Silicon Mac | [Mac app ZIP](https://github.com/Uranatom/Viewcut/releases/latest/download/Viewcut-Web-macOS-AppleSilicon.zip) |
+| Web launcher · Intel Mac | [Mac app ZIP](https://github.com/Uranatom/Viewcut/releases/latest/download/Viewcut-Web-macOS-Intel.zip) |
 
-1. Run `artifacts/Setup/Viewcut-0.6.0-Setup-x64.exe` after building, or launch the
+[All release files](https://github.com/Uranatom/Viewcut/releases/latest) · [Static web deployment bundle](https://github.com/Uranatom/Viewcut/releases/latest/download/Viewcut-Web-Static.zip)
+
+## Desktop Quick Start
+
+1. Download and run the Windows installer. Choose the install folder and optional desktop shortcut, then open Viewcut.
+2. **Drop an MP4 / MOV directly onto the player**, or double-click a video in the sidebar.
+3. Press Space to play/pause, **I** to mark in and **O** to mark out. Repeat to select several clips. Marking out does not export automatically.
+4. Choose an export folder, then click the timeline's **export icon** to export every clip from the current video. Hover over icons for their names and shortcuts.
+
+## Web Quick Start
+
+1. Download `Viewcut-Web-Windows.exe`, or unzip the appropriate Mac ZIP to get `Viewcut Web.app`.
+2. **Double-click the app icon. Your browser opens automatically.** No command line, Node installation, .NET installation or manual server startup is required.
+3. Drop a video onto the player, or use the sidebar to open a folder/video. Chrome, Edge and macOS Safari are supported targets.
+4. Mark clips with I / O, then export. **Chrome / Edge** write to an authorized directory. **Safari** prepares a ZIP; click Download and extract it to get the clips.
+5. On Mac use **Command+click** for multiple selection, **Command+Z** to undo and **Command+Shift+Z** to redo. Change language and theme in Preferences.
+
+Videos stay on your device. The Mac app is currently an unnotarized test build and may require first-launch approval in macOS settings. See [launcher notes](launcher/README.md) for compatibility and validation. Windows 10 machine acceptance remains pending.
+
+## Detailed usage
+
+1. Run `artifacts/Setup/Viewcut-0.6.1-Setup-x64.exe` after building, or launch the
    portable `artifacts/Viewcut/Viewcut.exe`. The installer supports a custom installation
    folder, optional desktop shortcut and optional Explorer context-menu commands.
 2. Browse folders in the right sidebar. Double-click a video to load it. A single click

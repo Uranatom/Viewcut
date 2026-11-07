@@ -92,6 +92,10 @@ internal sealed class MainWindow : Form
         video.Paint += DrawEmptyVideo;
         playback.Controls.Add(mediaName, 0, 0);
         playback.Controls.Add(video, 0, 1);
+        video.Name = "videoSurface";
+        EnableVideoDrop(playback);
+        EnableVideoDrop(video);
+        EnableVideoDrop(mediaName);
         split.Controls.Add(playback, 0, 0);
 
         var exportPage = new Panel { Dock = DockStyle.Fill };
@@ -413,6 +417,18 @@ internal sealed class MainWindow : Form
         if (!string.Equals(browser.CurrentFolder, parent, StringComparison.OrdinalIgnoreCase))
             _ = browser.NavigateAsync(parent, path);
         else browser.SelectPath(path);
+    }
+
+    private void EnableVideoDrop(Control surface)
+    {
+        surface.AllowDrop = true;
+        static string? Input(IDataObject? data) => data?.GetData(DataFormats.FileDrop) is string[] paths
+            ? paths.FirstOrDefault(path => File.Exists(path) && IsVideo(path)) : null;
+        void Over(object? sender, DragEventArgs e) => e.Effect = !closing && Input(e.Data) is not null
+            && (e.AllowedEffect & DragDropEffects.Copy) != 0 ? DragDropEffects.Copy : DragDropEffects.None;
+        surface.DragEnter += Over;
+        surface.DragOver += Over;
+        surface.DragDrop += (_, e) => { if (Input(e.Data) is { } path) ActivateInput(path); };
     }
 
     private static bool IsVideo(string path) => Path.GetExtension(path).ToLowerInvariant() is ".mp4" or ".mov";

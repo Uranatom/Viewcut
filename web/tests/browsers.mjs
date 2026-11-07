@@ -31,6 +31,11 @@ try {
       // streams below are real browser File System Access objects, stored in OPFS.
       await page.addInitScript(() => { window.showDirectoryPicker = async options => { const storage = await navigator.storage.getDirectory(); return storage.getDirectoryHandle(options.id === 'viewcut-destination' ? 'Exports' : 'Camera',{create:true}); }; });
       await page.goto(url);
+      const dropped = await page.evaluateHandle(data => { const transfer = new DataTransfer(); transfer.items.add(new File([Uint8Array.from(atob(data),c=>c.charCodeAt(0))],'Dropped video.mp4',{type:'video/mp4'})); return transfer; },fixture.toString('base64'));
+      await page.locator('#stage').dispatchEvent('dragenter',{dataTransfer:dropped}); assert.ok(await page.locator('#stage').evaluate(e=>e.classList.contains('drop-target')));
+      await page.locator('#stage').dispatchEvent('drop',{dataTransfer:dropped});
+      await page.waitForFunction(()=>document.querySelector('#activeName').textContent==='Dropped video.mp4'&&!document.querySelector('[data-action=markIn]').disabled);
+      await dropped.dispose();
       await page.evaluate(async data => {
         const root = await navigator.storage.getDirectory(), directory = await root.getDirectoryHandle('Camera',{create:true});
         for (const [name,b64] of Object.entries(data)) { const file = await directory.getFileHandle(name,{create:true}), stream = await file.createWritable(); await stream.write(Uint8Array.from(atob(b64),c => c.charCodeAt(0))); await stream.close(); }
@@ -39,7 +44,7 @@ try {
       await page.locator('[data-action=openFolder]').click();
       await page.locator('.file-row').filter({hasText:'Camera sunset.mp4'}).waitFor();
       await page.locator('.file-row').filter({hasText:'Camera sunset.mp4'}).click();
-      assert.equal(await page.locator('#player').evaluate(e => !!e.currentSrc),false,'single click does not load media');
+      assert.equal(await page.locator('#activeName').textContent(),'Dropped video.mp4','single click does not replace the loaded video');
       await page.locator('.file-row').filter({hasText:'Camera sunset.mp4'}).dblclick();
       await page.waitForFunction(() => !document.querySelector('[data-action=markIn]').disabled);
       async function seek(time) { await page.locator('#player').evaluate((e,time) => { e.currentTime = time; },time); await page.waitForFunction(time => Math.abs(document.querySelector('#player').currentTime-time) < .1,time); }
@@ -72,7 +77,7 @@ try {
       // File browser multi-selection and actual browser filesystem operations.
       await page.locator('[data-action=files]').click(); const rows = page.locator('.file-row');
       await rows.filter({hasText:'Camera mountains.mp4'}).click(); await rows.filter({hasText:'Camera sunset.mp4'}).click({modifiers:[command]}); assert.equal(await page.locator('.file-row.selected').count(),2);
-      await page.keyboard.press(command+'+c'); await rows.filter({hasText:'Saved'}).dblclick(); await page.locator('#fileList').focus(); await page.keyboard.press(command+'+v'); await page.waitForFunction(() => document.querySelectorAll('.file-row').length === 2);
+      await page.keyboard.press(command+'+c'); await rows.filter({hasText:'Saved'}).dblclick(); await page.waitForFunction(() => [...document.querySelectorAll('#breadcrumb button')].at(-1)?.textContent === 'Saved'); await page.locator('#fileList').focus(); await page.keyboard.press(command+'+v'); await page.waitForFunction(() => document.querySelectorAll('.file-row').length === 2);
       await page.locator('.file-row').first().click(); await page.keyboard.press(command+'+a'); assert.equal(await page.locator('.file-row.selected').count(),2);
       page.once('dialog',dialog => dialog.accept()); await page.keyboard.press('Delete'); await page.waitForFunction(() => !document.querySelector('.file-row'));
       await page.locator('[data-action=up]').click(); await page.locator('.file-row').filter({hasText:'Camera sunset.mp4'}).waitFor();
