@@ -43,5 +43,5 @@
   <input id="fileInput" type="file" accept="video/*,.mov,.mp4" multiple hidden>
   <input id="folderInput" type="file" webkitdirectory multiple hidden>
   <dialog id="downloadDialog"><form method="dialog"><h2 data-i18n="downloadReady"></h2><p data-i18n="downloadHelp"></p><div class="dialog-actions"><button type="button" data-action="downloadZip" class="accent"></button><button value="close" data-action="close"></button></div></form></dialog>
-  <video id="previewVideo" muted playsinline preload="metadata" hidden></video>
+  <video id="previewVideo" class="preview-source" muted playsinline preload="auto" aria-hidden="true" tabindex="-1"></video>
 </body></html>

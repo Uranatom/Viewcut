@@ -161,6 +161,7 @@ async function openVideo(entry) {
   sourceKey = JSON.stringify([rootId, entry.file?.webkitRelativePath || entry.name, ...folders.slice(1).map(f => f.name),file.size,file.lastModified]);
   editor = editors.get(sourceKey) || new Editor(drafts[sourceKey]?.clips || []); editor.mark = null; zoom = 1; viewport.scrollLeft = 0;
   if (url) URL.revokeObjectURL(url); url = URL.createObjectURL(file); player.src = url; previewVideo.src = url; previewTarget = null; previewBusy = false;
+  $('#preview').hidden = true;
   $('#empty').hidden = true; $('#mediaName').textContent = $('#activeName').textContent = file.name; document.title = `Viewcut · ${file.name}`; status(t('loading')); renderAll();
 }
 function changedSource() { return active?.entry.handle?.getFile().then(file => { if (file.size !== active.file.size || file.lastModified !== active.file.lastModified) throw new Error('sourceChanged'); }) || Promise.resolve(); }
@@ -245,9 +246,12 @@ function showPreview(at,x) {
   e.querySelector('output').textContent = format(at); previewTarget = Math.min(at,Math.max(0,duration - .001)); pumpPreview();
 }
 function paintPreview() {
+  if (previewVideo.readyState < 2 || !previewVideo.videoWidth || !previewVideo.videoHeight) return false;
   const canvas = $('#preview canvas'), context = canvas.getContext('2d');
+  if (!context) return false;
   context.fillStyle = '#000'; context.fillRect(0,0,canvas.width,canvas.height);
-  if (previewVideo.videoWidth) { const scale = Math.min(canvas.width / previewVideo.videoWidth,canvas.height / previewVideo.videoHeight); const w = previewVideo.videoWidth * scale,h = previewVideo.videoHeight * scale; context.drawImage(previewVideo,(canvas.width-w)/2,(canvas.height-h)/2,w,h); }
+  try { const scale = Math.min(canvas.width / previewVideo.videoWidth,canvas.height / previewVideo.videoHeight); const w = previewVideo.videoWidth * scale,h = previewVideo.videoHeight * scale; context.drawImage(previewVideo,(canvas.width-w)/2,(canvas.height-h)/2,w,h); return true; }
+  catch (error) { if (error.name !== 'InvalidStateError') throw error; return false; }
 }
 function pumpPreview() {
   if (previewBusy || previewTarget === null || !previewReady) return;
@@ -255,7 +259,8 @@ function pumpPreview() {
   previewBusy = true; const at = previewTarget; previewTarget = null; previewVideo.currentTime = at;
 }
 previewVideo.onloadedmetadata = () => { previewReady = true; };
-previewVideo.onseeked = () => { previewBusy = false; paintPreview(); pumpPreview(); };
+previewVideo.onseeked = () => { previewBusy = false; paintPreview(); if (previewVideo.requestVideoFrameCallback) previewVideo.requestVideoFrameCallback(() => paintPreview()); pumpPreview(); };
+previewVideo.onloadeddata = previewVideo.oncanplay = () => { paintPreview(); pumpPreview(); };
 player.onloadedmetadata = () => { duration = player.duration; if (!Number.isFinite(duration) || duration <= 0) { report(new Error('unsupportedPlayback')); return; } sourceReady = true; renderTimeline(); buttons(); status(t('ready')); };
 player.onerror = () => { sourceReady = false; status(t('unsupportedPlayback')); buttons(); };
 player.ontimeupdate = clock;
