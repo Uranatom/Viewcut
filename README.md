@@ -6,7 +6,7 @@ Viewcut 是面向 Windows 10 22H2／Windows 11 x64 的本地视频粗筛工具�
 
 ## 试用
 
-新增 Chrome／Edge 网页端：运行 `node web/server.mjs`，在浏览器打开 `http://127.0.0.1:4173`。素材在本机处理，支持多片段编辑、预览和批量无损导出。网页端使用浏览器授权的目录，文件操作范围与 Windows Shell 有差异；操作、格式边界和测试方法见 [网页端说明](web/README.md)。
+新增网页端：Windows 双击 `artifacts/WebLauncher/win-x64/Viewcut.Web.exe`，Mac 解压对应架构的运行包后双击 `Viewcut Web.app`，即自动打开浏览器。支持 Chrome／Edge，并为 Mac Safari 提供文件夹导入和 ZIP 导出。素材在本机处理，支持多片段编辑、预览和批量无损导出。网页端使用浏览器授权的目录，文件操作范围与 Windows Shell 有差异；操作、格式边界和测试方法见 [网页端说明](web/README.md)。
 
 1. 运行 `artifacts\Setup\Viewcut-0.6.0-Setup-x64.exe`，选择安装位置和快捷方式，再从开始菜单打开 Viewcut。也可以直接运行 `artifacts\Viewcut\Viewcut.exe`。
 2. 在右侧「文件」浏览文件夹。可用地址栏、常用位置或磁盘入口导航，支持后退、前进、上一级、刷新和当前目录搜索。「大图标」与「列表」按钮可切换视图。双击文件夹进入，双击 MP4／MOV 后加载到播放器。外部右键视频仍可直接播放，右键文件夹则打开文件浏览器。

@@ -5,6 +5,8 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { serve } from '../server.mjs';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
+const windows = process.platform === 'win32', command = process.platform === 'darwin' ? 'Meta' : 'Control';
+const ffmpeg = path.join(process.env.VIEWCUT_TEST_TOOLS || path.join(root,'.tools','ffmpeg'),windows ? 'ffmpeg.exe' : 'ffmpeg');
 const output = path.join(root,'artifacts','web-browsers'); await mkdir(output,{recursive:true});
 const playwrightPath = process.env.VIEWCUT_PLAYWRIGHT || path.resolve(path.dirname(process.execPath),'../node_modules/playwright/index.mjs');
 const { chromium } = await import(pathToFileURL(playwrightPath).href);
@@ -12,8 +14,8 @@ const { server,url } = await serve({port:0});
 const fixture = await readFile(path.join(root,'artifacts','web-media','相机 素材.mp4'));
 const hevc = await readFile(path.join(root,'artifacts','web-media','camera.mov'));
 const browsers = [
-  ['Chrome',path.join(process.env.ProgramFiles,'Google','Chrome','Application','chrome.exe')],
-  ['Edge',path.join(process.env['ProgramFiles(x86)'],'Microsoft','Edge','Application','msedge.exe')],
+  ['Chrome',windows ? path.join(process.env.ProgramFiles,'Google','Chrome','Application','chrome.exe') : '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'],
+  ['Edge',windows ? path.join(process.env['ProgramFiles(x86)'],'Microsoft','Edge','Application','msedge.exe') : '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge'],
 ];
 const results = [];
 try {
@@ -53,7 +55,7 @@ try {
       // One drag is one undo step and the playhead follows the handle.
       const handle = await page.locator('.segment').first().locator('.handle.end').boundingBox();
       await page.mouse.move(handle.x + 4,handle.y + 15); await page.mouse.down(); await page.mouse.move(handle.x + 60,handle.y + 15,{steps:12}); await page.mouse.up();
-      await page.locator('#timelineViewport').focus(); await page.keyboard.press('Control+z'); await page.keyboard.press('Control+Shift+z');
+      await page.locator('#timelineViewport').focus(); await page.keyboard.press(command+'+z'); await page.keyboard.press(command+'+Shift+z');
       const timeline = await page.locator('#track').boundingBox(); await page.mouse.move(timeline.x + timeline.width*.5,timeline.y + 52);
       await page.waitForFunction(() => !document.querySelector('#preview').hidden);
       await page.waitForFunction(() => { const c = document.querySelector('#preview canvas'); return c.getContext('2d').getImageData(0,0,c.width,c.height).data.some((n,i) => i % 4 !== 3 && n > 10); });
@@ -61,17 +63,17 @@ try {
       await page.mouse.move(divider.x+3,divider.y+100); await page.mouse.down(); await page.mouse.move(divider.x-90,divider.y+100,{steps:20}); await page.mouse.up();
       assert.ok(await page.locator('#sidebar').evaluate(e => e.clientWidth) > before + 50);
       const horizontal = await page.locator('#horizontalDivider').boundingBox(); await page.mouse.move(horizontal.x+100,horizontal.y+3); await page.mouse.down(); await page.mouse.move(horizontal.x+100,horizontal.y-60,{steps:15}); await page.mouse.up();
-      await page.locator('.segment').first().click(); await page.locator('.segment').nth(1).click({modifiers:['Control']}); await page.keyboard.press('Delete'); assert.equal(await page.locator('.segment').count(),0); await page.keyboard.press('Control+z'); assert.equal(await page.locator('.segment').count(),2);
+      await page.locator('.segment').first().click(); await page.locator('.segment').nth(1).click({modifiers:[command]}); await page.keyboard.press('Delete'); assert.equal(await page.locator('.segment').count(),0); await page.keyboard.press(command+'+z'); assert.equal(await page.locator('.segment').count(),2);
       await page.locator('[data-action=destination]').click(); await page.locator('[data-action=export]').click();
       await page.waitForFunction(() => document.querySelectorAll('.job-card.done').length === 2,{},{timeout:30000});
       const exports = await page.evaluate(async () => { const root = await navigator.storage.getDirectory(), directory = await root.getDirectoryHandle('Exports'), files = []; for await (const [name,handle] of directory.entries()) { const data = new Uint8Array(await (await handle.getFile()).arrayBuffer()); let binary = ''; for (const b of data) binary += String.fromCharCode(b); files.push({name,data:btoa(binary)}); } return files; });
       assert.ok(exports.some(file => file.name === 'Sunset.mp4'));
-      for (const file of exports) { const filename = path.join(output,name+'-'+file.name); await writeFile(filename,Buffer.from(file.data,'base64')); execFileSync(path.join(root,'.tools','ffmpeg','ffmpeg.exe'),['-v','error','-xerror','-i',filename,'-f','null','-'],{windowsHide:true}); }
+      for (const file of exports) { const filename = path.join(output,name+'-'+file.name); await writeFile(filename,Buffer.from(file.data,'base64')); execFileSync(ffmpeg,['-v','error','-xerror','-i',filename,'-f','null','-'],{windowsHide:true}); }
       // File browser multi-selection and actual browser filesystem operations.
       await page.locator('[data-action=files]').click(); const rows = page.locator('.file-row');
-      await rows.filter({hasText:'Camera mountains.mp4'}).click(); await rows.filter({hasText:'Camera sunset.mp4'}).click({modifiers:['Control']}); assert.equal(await page.locator('.file-row.selected').count(),2);
-      await page.keyboard.press('Control+c'); await rows.filter({hasText:'Saved'}).dblclick(); await page.locator('#fileList').focus(); await page.keyboard.press('Control+v'); await page.waitForFunction(() => document.querySelectorAll('.file-row').length === 2);
-      await page.locator('.file-row').first().click(); await page.keyboard.press('Control+a'); assert.equal(await page.locator('.file-row.selected').count(),2);
+      await rows.filter({hasText:'Camera mountains.mp4'}).click(); await rows.filter({hasText:'Camera sunset.mp4'}).click({modifiers:[command]}); assert.equal(await page.locator('.file-row.selected').count(),2);
+      await page.keyboard.press(command+'+c'); await rows.filter({hasText:'Saved'}).dblclick(); await page.locator('#fileList').focus(); await page.keyboard.press(command+'+v'); await page.waitForFunction(() => document.querySelectorAll('.file-row').length === 2);
+      await page.locator('.file-row').first().click(); await page.keyboard.press(command+'+a'); assert.equal(await page.locator('.file-row.selected').count(),2);
       page.once('dialog',dialog => dialog.accept()); await page.keyboard.press('Delete'); await page.waitForFunction(() => !document.querySelector('.file-row'));
       await page.locator('[data-action=up]').click(); await page.locator('.file-row').filter({hasText:'Camera sunset.mp4'}).waitFor();
       await page.locator('[data-action=refresh]').click(); await page.locator('.file-row.playing').filter({hasText:'Camera sunset.mp4'}).waitFor();
@@ -84,7 +86,7 @@ try {
         await page.locator('[data-action=export]').click(); await page.waitForFunction(() => document.querySelectorAll('.job-card.done').length === 1,{},{timeout:30000});
         const expectedName = path.basename(source).replace(/\.[^.]+$/,'') + '_001.mp4';
         const exported = await page.evaluate(async expectedName => { const root = await navigator.storage.getDirectory(),directory = await root.getDirectoryHandle('Exports'),file = await (await directory.getFileHandle(expectedName)).getFile(); let binary = ''; for (const b of new Uint8Array(await file.arrayBuffer())) binary += String.fromCharCode(b); return btoa(binary); },expectedName);
-        const filename = path.join(output,`${name}-large.mp4`); await writeFile(filename,Buffer.from(exported,'base64')); execFileSync(path.join(root,'.tools','ffmpeg','ffmpeg.exe'),['-v','error','-xerror','-i',filename,'-f','null','-'],{windowsHide:true});
+        const filename = path.join(output,`${name}-large.mp4`); await writeFile(filename,Buffer.from(exported,'base64')); execFileSync(ffmpeg,['-v','error','-xerror','-i',filename,'-f','null','-'],{windowsHide:true});
         console.log(`PASS ${name}: large source ${path.basename(source)}`);
       }
       await page.locator('[data-action=preferences]').click(); await page.locator('#language').selectOption('en-US'); await page.locator('#theme').selectOption('light'); await page.locator('#preferences [data-action=close]').click();

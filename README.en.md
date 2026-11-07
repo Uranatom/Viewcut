@@ -8,7 +8,7 @@ clips from a video in one batch.
 
 ## Using Viewcut
 
-Chrome / Edge web app: run `node web/server.mjs`, then open `http://127.0.0.1:4173`.
+Web app: double-click `Viewcut.Web.exe` on Windows or `Viewcut Web.app` on Mac. The launcher opens your browser automatically. Chrome/Edge support direct directory exports; Safari uses folder import and ZIP downloads.
 Videos stay on the device. The web app includes clip editing, previews and batch
 lossless export. Browser file permissions and codec support differ from the desktop
 app; see [web documentation](web/README.md) for usage, limitations and tests.

@@ -1,8 +1,16 @@
-# Viewcut Web 0.6.0
+# Viewcut Web 0.6.1
 
-Chrome / Edge 桌面浏览器的本地视频粗筛工具。没有账号、上传接口、外部 CDN 或运行时依赖；视频、缩略图与导出都在用户设备上处理。页面文件可部署到任意 HTTPS 静态托管服务。
+Windows / macOS 浏览器的本地视频粗筛工具，面向 Chrome、Edge 和 macOS Safari。没有账号、上传接口或外部 CDN；视频、缩略图与导出都在用户设备上处理。页面文件可部署到任意 HTTPS 静态托管服务。
 
-## 本机运行
+## 双击启动
+
+普通用户直接双击 `Viewcut.Web.exe`（Windows），或解压后双击 `Viewcut Web.app`（Mac，分别提供 Apple Silicon / Intel 版本）。启动器带软件图标，内置网页和所需运行组件，会自动启动本地服务、打开浏览器，重复启动复用服务，关闭网页后自动退出。不需要先运行 CMD、启动服务器或安装 Node / .NET。详见 [启动器说明](../launcher/README.md)。
+
+Mac 使用系统字体，支持 Command 多选、Command+Z 撤销、Command+Shift+Z 重做。Safari 通过文件夹选择器导入目录，并将全部选中片段打包成 ZIP 下载；下载后解压即可得到用户命名的视频。其源文件是只读的，不能在网页里直接重命名、移动或删除。Chrome / Edge 继续支持目录授权及直接写入保存目录。Safari 不支持的文件操作会禁用并说明原因。
+
+Mac 包目前未经过 Developer ID 签名与公证，属于开发测试包；首次打开可能需要按系统安全提示允许。当前验证范围见仓库中的 macOS 自动化结果，WebKit 与实际 Safari 的验证分别记录。
+
+## 开发者本机运行
 
 安装 Node.js 22 或更新版本，在仓库根目录执行：
 
