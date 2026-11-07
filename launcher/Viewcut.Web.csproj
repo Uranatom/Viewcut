@@ -14,6 +14,6 @@
     <DebugSymbols>false</DebugSymbols>
   </PropertyGroup>
   <ItemGroup>
-    <EmbeddedResource Include="../web/*.html;../web/*.js;../web/*.css;../web/*.svg" LogicalName="web.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="../web/*.html;../web/*.js;../web/*.css;../web/*.svg;../web/*.txt" LogicalName="web.%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

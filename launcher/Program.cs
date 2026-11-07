@@ -87,7 +87,7 @@ internal static class Program
             foreach (var executable in candidates.Where(File.Exists)) { Launch(executable, url, options); return; }
             if (options.Browser != "auto") throw new FileNotFoundException("Install " + options.Browser + " and try again.");
             // Honor the user's default browser when it supports the app.
-            using var association = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice");
+            using var association = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\http\UserChoice");
             var id = association?.GetValue("ProgId") as string ?? "";
             if (id.StartsWith("ChromeHTML", StringComparison.OrdinalIgnoreCase) || id.StartsWith("MSEdgeHTM", StringComparison.OrdinalIgnoreCase))
             { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); return; }
@@ -169,7 +169,7 @@ internal sealed class LocalHost : IDisposable
         {
             using var source = assembly.GetManifestResourceStream(name)!; using var output = new MemoryStream(); source.CopyTo(output);
             var file = name[4..];
-            assets["/" + file] = (output.ToArray(), Path.GetExtension(file) switch { ".html" => "text/html; charset=utf-8", ".js" => "text/javascript; charset=utf-8", ".css" => "text/css; charset=utf-8", ".svg" => "image/svg+xml", _ => "application/octet-stream" });
+            assets["/" + file] = (output.ToArray(), Path.GetExtension(file) switch { ".html" => "text/html; charset=utf-8", ".js" => "text/javascript; charset=utf-8", ".css" => "text/css; charset=utf-8", ".svg" => "image/svg+xml", ".txt" => "text/plain; charset=utf-8", _ => "application/octet-stream" });
         }
         if (!assets.ContainsKey("/index.html")) throw new IOException("The web interface is missing.");
     }

@@ -172,3 +172,4 @@ body{min-height:780px}
 }
 #stage.drop-target::after{content:attr(data-drop-label);position:absolute;inset:8px;border:2px dashed var(--accent);border-radius:8px;background:#000a;color:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;pointer-events:none}
 .preview-source{position:fixed;right:0;bottom:0;width:2px;height:2px;opacity:.001;pointer-events:none;z-index:1}
+dialog a{color:var(--accent)}

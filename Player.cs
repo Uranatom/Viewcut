@@ -7,6 +7,7 @@ internal sealed partial class Player : IDisposable
 {
     private const int Flag = 3;
     private const int Double = 5;
+    private const int Node = 6;
     private const ulong LoadRequest = 10;
     private const ulong SeekRequest = 11;
     private readonly bool preview;
@@ -14,6 +15,7 @@ internal sealed partial class Player : IDisposable
     private bool loading;
     private bool started;
     private (string Path, double Start)? nextFile;
+    private string? droppedFile;
 
     public bool Ready { get; private set; }
     public bool HasFrame { get; private set; }
@@ -35,6 +37,9 @@ internal sealed partial class Player : IDisposable
             Set("load-scripts", "no");
             Set("osc", "no");
             Set("input-default-bindings", "no");
+            // The embedded mpv child owns an OLE drop target. Keep its native
+            // notification, but let Viewcut update the media, clips and sidebar.
+            Set("input-builtin-drag-and-drop", "no");
             Set("input-vo-keyboard", "no");
             Set("input-cursor", "no");
             Set("vo", "gpu");
@@ -51,6 +56,7 @@ internal sealed partial class Player : IDisposable
             Check(Observe(handle, 1, "time-pos", Double));
             Check(Observe(handle, 2, "duration", Double));
             Check(Observe(handle, 3, "pause", Flag));
+            if (!preview) Check(Observe(handle, 4, "dropped-files/files", Node));
         }
         catch
         {
@@ -131,9 +137,29 @@ internal sealed partial class Player : IDisposable
                     }
                     if (property.Format == Flag && e.Reply == 3)
                         Paused = Marshal.ReadInt32(property.Data) != 0;
+                    if (property.Format == Node && e.Reply == 4 && property.Data != IntPtr.Zero)
+                    {
+                        var node = Marshal.PtrToStructure<NativeNode>(property.Data);
+                        if (node.Format == 7 && node.Value != IntPtr.Zero)
+                        {
+                            var list = Marshal.PtrToStructure<NativeNodeList>(node.Value);
+                            if (list.Count > 0 && list.Values != IntPtr.Zero)
+                            {
+                                var first = Marshal.PtrToStructure<NativeNode>(list.Values);
+                                if (first.Format == 1) droppedFile = Marshal.PtrToStringUTF8(first.Value);
+                            }
+                        }
+                    }
                     break;
             }
         }
+    }
+
+    public string? TakeDroppedFile()
+    {
+        var result = droppedFile;
+        droppedFile = null;
+        return result;
     }
 
     private void FinishLoad(string? error)
@@ -199,6 +225,11 @@ internal sealed partial class Player : IDisposable
         public int Format;
         public IntPtr Data;
     }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeNode { public IntPtr Value; public int Format; }
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeNodeList { public int Count; public IntPtr Values; public IntPtr Keys; }
 
     private const string Library = "libmpv-2.dll";
     [LibraryImport(Library, EntryPoint = "mpv_create")]

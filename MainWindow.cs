@@ -602,6 +602,7 @@ internal sealed class MainWindow : Form
         preview?.UpdateFrame();
         if (player is not { } engine) return;
         engine.Poll();
+        if (engine.TakeDroppedFile() is { } dropped) { ActivateInput(dropped); return; }
         if (engine.Error is { } error)
         {
             if (opening) SetStatus(L.F("播放失败：{0}", error));

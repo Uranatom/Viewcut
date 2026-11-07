@@ -14,7 +14,7 @@ export function serve({ port = 4173 } = {}) {
       const relative = path.relative(root,filename);
       if (relative.startsWith('..') || path.isAbsolute(relative) || relative.split(path.sep).some(p => p.startsWith('.')) || /^(tests|node_modules)(\/|\\)/.test(relative) || relative.endsWith('.mjs') || relative.endsWith('.md') || relative === 'package.json') throw new Error('notFound');
       const info = await stat(filename); if (!info.isFile()) throw new Error('notFound');
-      const types = {'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.svg':'image/svg+xml','.mp4':'video/mp4','.mov':'video/quicktime','.json':'application/json'};
+      const types = {'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.svg':'image/svg+xml','.mp4':'video/mp4','.mov':'video/quicktime','.json':'application/json','.txt':'text/plain; charset=utf-8'};
       const headers = {'Content-Type':types[path.extname(filename)] || 'application/octet-stream','X-Content-Type-Options':'nosniff','Cache-Control':'no-cache','Referrer-Policy':'no-referrer','Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; media-src 'self' blob:; connect-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"};
       response.writeHead(200,{...headers,'Content-Length':info.size});
       if (request.method === 'HEAD') { response.end(); return; }
