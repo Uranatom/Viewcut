@@ -2,6 +2,8 @@
 
 简体中文 · [English](README.en.md)
 
+许可证：[GNU GPL v3.0](LICENSE)（SPDX：`GPL-3.0-only`）。第三方组件保留各自许可证，见[依赖声明](media/THIRD-PARTY-NOTICES.txt)。
+
 Viewcut 是面向 Windows 10 22H2／Windows 11 x64 的本地视频粗筛工具。Windows 10 实机验收尚待完成，见 [兼容性说明](docs/windows-compatibility.md)。浏览相机或无人机的 MP4／MOV，标记要保留的片段，选完一条素材后一次导出到指定目录。
 
 ## 最新版下载

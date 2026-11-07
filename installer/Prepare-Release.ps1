@@ -17,7 +17,9 @@ foreach ($item in $sources.GetEnumerator()) {
 }
 $static = Get-ChildItem -LiteralPath (Join-Path $repo 'web') -File |
     Where-Object { $_.Extension -in '.html', '.js', '.css', '.svg', '.txt' }
-Compress-Archive -LiteralPath $static.FullName -DestinationPath (Join-Path $release 'Viewcut-Web-Static.zip') -Force
+Compress-Archive -LiteralPath ($static.FullName + @((Join-Path $repo 'LICENSE'), (Join-Path $repo 'COPYRIGHT'))) -DestinationPath (Join-Path $release 'Viewcut-Web-Static.zip') -Force
+Copy-Item -LiteralPath (Join-Path $repo 'LICENSE') -Destination (Join-Path $release 'LICENSE.txt') -Force
+Copy-Item -LiteralPath (Join-Path $repo 'COPYRIGHT') -Destination (Join-Path $release 'COPYRIGHT.txt') -Force
 Copy-Item -LiteralPath (Join-Path $repo 'launcher\README.md') -Destination (Join-Path $release 'Web-README.txt') -Force
 $hashes = Get-ChildItem -LiteralPath $release -File | Where-Object Name -ne 'SHA256SUMS.txt' | ForEach-Object {
     $hash = Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256

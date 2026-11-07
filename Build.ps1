@@ -47,4 +47,5 @@ Copy-Item -Path (Join-Path $PSScriptRoot 'media\licenses\*.txt') -Destination (J
 if (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'LICENSE')) {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'LICENSE') -Destination (Join-Path $output 'Viewcut-LICENSE.txt') -Force
 }
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'COPYRIGHT') -Destination (Join-Path $output 'Viewcut-COPYRIGHT.txt') -Force
 Write-Host (Join-Path $output 'Viewcut.exe')

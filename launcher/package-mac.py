@@ -66,6 +66,10 @@ files = {
     "Viewcut Web.app/Contents/MacOS/Viewcut": (binary.read_bytes(), 0o755),
     "Viewcut Web.app/Contents/Resources/Viewcut.icns": (icns, 0o644),
     "README.txt": ((repo / "launcher/README.md").read_bytes(), 0o644),
+    "LICENSE.txt": ((repo / "LICENSE").read_bytes(), 0o644),
+    "COPYRIGHT.txt": ((repo / "COPYRIGHT").read_bytes(), 0o644),
+    "Viewcut Web.app/Contents/Resources/LICENSE.txt": ((repo / "LICENSE").read_bytes(), 0o644),
+    "Viewcut Web.app/Contents/Resources/COPYRIGHT.txt": ((repo / "COPYRIGHT").read_bytes(), 0o644),
 }
 archive = output / f"Viewcut-Web-0.6.1-{args.rid}.zip"
 with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as bundle:

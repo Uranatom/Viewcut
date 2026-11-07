@@ -4,6 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <AssemblyName>Viewcut.Web</AssemblyName>
     <Version>0.6.1</Version>
+    <PackageLicenseExpression>GPL-3.0-only</PackageLicenseExpression>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <ApplicationIcon>../installer/Viewcut.ico</ApplicationIcon>
@@ -15,5 +16,7 @@
   </PropertyGroup>
   <ItemGroup>
     <EmbeddedResource Include="../web/*.html;../web/*.js;../web/*.css;../web/*.svg;../web/*.txt" LogicalName="web.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="../LICENSE" LogicalName="web.Viewcut-LICENSE.txt" />
+    <EmbeddedResource Include="../COPYRIGHT" LogicalName="web.Viewcut-COPYRIGHT.txt" />
   </ItemGroup>
 </Project>

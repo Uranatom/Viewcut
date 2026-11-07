@@ -9,6 +9,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <ApplicationIcon>installer\Viewcut.ico</ApplicationIcon>
     <Version>0.6.1</Version>
+    <PackageLicenseExpression>GPL-3.0-only</PackageLicenseExpression>
   </PropertyGroup>
   <ItemGroup>
     <EmbeddedResource Include="Localization.en.json" WithCulture="false" LogicalName="Viewcut.Localization.en.json" />

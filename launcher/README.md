@@ -1,5 +1,7 @@
 # Viewcut Web 0.6.1
 
+Viewcut 采用 GNU GPL v3.0（SPDX：GPL-3.0-only）。完整条款见随包提供的 LICENSE.txt 或仓库 LICENSE；第三方组件保留其各自许可证。
+
 ## 直接打开
 
 - Windows 10 22H2 / Windows 11 x64：双击 `Viewcut.Web.exe`。

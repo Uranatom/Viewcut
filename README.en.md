@@ -2,6 +2,8 @@
 
 English · [简体中文](README.md)
 
+License: [GNU GPL v3.0](LICENSE) (`GPL-3.0-only`). Third-party components retain their own licenses; see [dependency notices](media/THIRD-PARTY-NOTICES.txt).
+
 Viewcut is a lightweight video player and rough-cut tool targeting Windows 10 22H2 and Windows 11 x64. Windows 10 machine acceptance is pending; see [compatibility notes](docs/windows-compatibility.md). Review
 camera or drone MP4/MOV footage, mark the parts worth keeping, and export all selected
 clips from a video in one batch.
@@ -112,4 +114,4 @@ media dependencies for offline installation. The compact FFmpeg/ffprobe pair is 
 Session data is stored in `%LOCALAPPDATA%/Viewcut/session.json`. Uninstall removes installed
 files, shortcuts and registered Explorer commands. Optional settings cleanup preserves
 source videos and exported clips. Third-party build sources and notices are listed in
-`installer/ThirdParty.txt` and [the Chinese documentation](README.md).
+[dependency notices](media/THIRD-PARTY-NOTICES.txt) and [the Chinese documentation](README.md).

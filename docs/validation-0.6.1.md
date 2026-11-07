@@ -18,4 +18,4 @@ macOS 15 automated machines:
 
 Mac apps are development builds without Developer ID notarization. Gatekeeper first-launch approval and actual removable SD-card behavior still need user-machine acceptance. Windows 10 22H2 machine acceptance remains pending; the compatibility code and font/DPI fallback checks from 0.6.0 are retained.
 
-Binary archives are assembled under `artifacts/Release/`, with stable asset filenames matching both README download tables and a SHA-256 manifest. Release publication also requires the project owner to choose the distribution license for the GPL libmpv desktop dependency; dependency license texts are prepared separately from Viewcut's own license.
+Binary archives are assembled under `artifacts/Release/`, with stable asset filenames matching both README download tables and a SHA-256 manifest. The project owner selected GNU GPL v3.0 (`GPL-3.0-only`). The project license/copyright notice and third-party notices accompany the downloadable binaries and web assets. Packaging-only license additions preserve the tested application behavior.

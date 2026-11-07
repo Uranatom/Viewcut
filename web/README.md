@@ -1,5 +1,7 @@
 # Viewcut Web 0.6.1
 
+项目采用 [GNU GPL v3.0](../LICENSE)（SPDX：`GPL-3.0-only`）。静态网页包包含 LICENSE 和 COPYRIGHT；第三方组件声明保留在 third-party-notices.txt。
+
 Windows / macOS 浏览器的本地视频粗筛工具，面向 Chrome、Edge 和 macOS Safari。没有账号、上传接口或外部 CDN；视频、缩略图与导出都在用户设备上处理。页面文件可部署到任意 HTTPS 静态托管服务。
 
 ## 双击启动
