@@ -188,22 +188,39 @@ var thread = new Thread(() =>
             var divider = controls.OfType<SidebarDivider>().Single(control => control.AccessibleName == "调整侧边栏宽度");
             var columns = (TableLayoutPanel)divider.Parent!;
             var oldFraction = columns.ColumnStyles[2].Width;
-            typeof(Control).GetMethod("OnMouseDown", BindingFlags.Instance | BindingFlags.NonPublic)!
-                .Invoke(divider, [new MouseEventArgs(MouseButtons.Left, 1, 2, 25, 0)]);
-            typeof(Control).GetMethod("OnMouseMove", BindingFlags.Instance | BindingFlags.NonPublic)!
-                .Invoke(divider, [new MouseEventArgs(MouseButtons.Left, 1, -80, 25, 0)]);
-            typeof(Control).GetMethod("OnMouseUp", BindingFlags.Instance | BindingFlags.NonPublic)!
-                .Invoke(divider, [new MouseEventArgs(MouseButtons.Left, 1, 2, 25, 0)]);
+            browser.SetView(false, notify: false);
+            await DragDivider(divider, horizontal: false);
             Assert(columns.ColumnStyles[2].Width > oldFraction, "Dragging the sidebar divider changes the width");
             var timelineDivider = controls.OfType<SidebarDivider>().Single(control => control.AccessibleName == "调整时间轴高度");
             var oldHeight = timeline.Height;
-            typeof(Control).GetMethod("OnMouseDown", BindingFlags.Instance | BindingFlags.NonPublic)!
-                .Invoke(timelineDivider, [new MouseEventArgs(MouseButtons.Left, 1, 25, 2, 0)]);
-            typeof(Control).GetMethod("OnMouseMove", BindingFlags.Instance | BindingFlags.NonPublic)!
-                .Invoke(timelineDivider, [new MouseEventArgs(MouseButtons.Left, 1, 25, -55, 0)]);
-            typeof(Control).GetMethod("OnMouseUp", BindingFlags.Instance | BindingFlags.NonPublic)!
-                .Invoke(timelineDivider, [new MouseEventArgs(MouseButtons.Left, 1, 25, 2, 0)]);
+            await DragDivider(timelineDivider, horizontal: true);
             Assert(timeline.Height > oldHeight && uiStore.Data.TimelineFraction > 0.24, "Dragging the timeline divider changes and saves its height");
+            browser.SetView(true, notify: false);
+
+            async Task DragDivider(SidebarDivider control, bool horizontal)
+            {
+                var grab = control.PointToScreen(new Point(horizontal ? 25 : 2, horizontal ? 2 : 25));
+                var initial = horizontal ? control.Top : control.Left;
+                void Send(string message, int offset)
+                {
+                    var local = control.PointToClient(new Point(grab.X + (horizontal ? 0 : offset),
+                        grab.Y + (horizontal ? offset : 0)));
+                    typeof(Control).GetMethod("OnMouse" + message, BindingFlags.Instance | BindingFlags.NonPublic)!
+                        .Invoke(control, [new MouseEventArgs(MouseButtons.Left, 1, local.X, local.Y, 0)]);
+                }
+
+                Send("Down", 0);
+                for (var offset = -1; offset >= -44; offset--) Send("Move", offset);
+                Assert((horizontal ? control.Top : control.Left) == initial, "A burst of mouse moves waits for one layout frame");
+                await WaitForUi(() => (horizontal ? control.Top : control.Left) < initial);
+                var intermediate = horizontal ? control.Top : control.Left;
+                Assert(list.Columns.Cast<ColumnHeader>().Sum(column => column.Width) == list.ClientSize.Width,
+                    "File columns fit while the divider is held");
+                // Release before the next tick; the final pointer position must still be applied.
+                Send("Up", -78);
+                Assert((horizontal ? control.Top : control.Left) < intermediate && !control.Capture,
+                    "Release applies the last pointer position and ends capture");
+            }
 
             playPause.PerformClick();
             await WaitForUi(() => playPause.Text == "播放");

@@ -73,7 +73,9 @@ internal static class EditorTheme
     public static void ApplyWindow(Form form)
     {
         var dark = IsLight ? 0 : 1;
-        DwmSetWindowAttribute(form.Handle, 20, ref dark, sizeof(int));
+        // 20 is supported by current Windows 10/11; older DWM revisions used 19.
+        if (DwmSetWindowAttribute(form.Handle, 20, ref dark, sizeof(int)) != 0)
+            DwmSetWindowAttribute(form.Handle, 19, ref dark, sizeof(int));
     }
 
     private static int Role(Color color)
@@ -90,7 +92,7 @@ internal static class EditorTheme
         {
             BackColor = Raised, ForeColor = Text,
             Renderer = new ToolStripProfessionalRenderer(new MenuColors()),
-            Font = new Font("Segoe UI Variable Text", 9.5f), ShowImageMargin = false
+            Font = new Font(UiFonts.Text, 9.5f), ShowImageMargin = false
         };
         void ThemeChanged() => ApplyMenu(menu);
         void LanguageChanged() => L.ApplyMenu(menu.Items);

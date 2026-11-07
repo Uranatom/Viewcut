@@ -10,7 +10,7 @@ internal sealed class PreferencesDialog : Form
     {
         AutoScaleDimensions = new SizeF(96, 96);
         AutoScaleMode = AutoScaleMode.Dpi;
-        Font = new Font("Segoe UI Variable Text", 9.5f);
+        Font = new Font(UiFonts.Text, 9.5f);
         Text = L.T("偏好设置");
         AccessibleName = "Viewcut Preferences";
         FormBorderStyle = FormBorderStyle.FixedDialog;

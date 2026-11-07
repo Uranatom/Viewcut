@@ -1,14 +1,19 @@
-# Viewcut 0.5.0
+# Viewcut 0.6.0
 
 English · [简体中文](README.md)
 
-Viewcut is a lightweight video player and rough-cut tool for Windows 11 x64. Review
+Viewcut is a lightweight video player and rough-cut tool targeting Windows 10 22H2 and Windows 11 x64. Windows 10 machine acceptance is pending; see [compatibility notes](docs/windows-compatibility.md). Review
 camera or drone MP4/MOV footage, mark the parts worth keeping, and export all selected
 clips from a video in one batch.
 
 ## Using Viewcut
 
-1. Run `artifacts/Setup/Viewcut-0.5.0-Setup-x64.exe` after building, or launch the
+Chrome / Edge web app: run `node web/server.mjs`, then open `http://127.0.0.1:4173`.
+Videos stay on the device. The web app includes clip editing, previews and batch
+lossless export. Browser file permissions and codec support differ from the desktop
+app; see [web documentation](web/README.md) for usage, limitations and tests.
+
+1. Run `artifacts/Setup/Viewcut-0.6.0-Setup-x64.exe` after building, or launch the
    portable `artifacts/Viewcut/Viewcut.exe`. The installer supports a custom installation
    folder, optional desktop shortcut and optional Explorer context-menu commands.
 2. Browse folders in the right sidebar. Double-click a video to load it. A single click

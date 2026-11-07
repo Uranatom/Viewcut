@@ -111,7 +111,9 @@ internal static class BrowserRegression
         {
             browser.SelectPath(file1);
             list.SelectedIndices.Add(2);
+            app.Activate();
             list.Focus();
+            await Until(() => list.ContainsFocus);
             Key(Keys.Control | Keys.C);
             Assert(Clipboard.GetFileDropList().Cast<string>().ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals([file1, file2]),
                 "Ctrl+C writes interoperable file-drop clipboard data");
@@ -142,7 +144,9 @@ internal static class BrowserRegression
             Assert(list.SelectedIndices.Count == 1, "Text-edit shortcuts do not select every file during rename");
             var afterEdit = typeof(ListView).GetMethod("OnAfterLabelEdit", BindingFlags.Instance | BindingFlags.NonPublic)!;
             var index = list.SelectedIndices[0];
-            SendMessage(list.Handle, 0x10B3, (IntPtr)1, IntPtr.Zero); // LVM_CANCELEDITLABEL
+            list.Focus();
+            SendMessage(list.Handle, 0x1076, (IntPtr)(-1), IntPtr.Zero); // LVM_EDITLABELW: cancel native edit.
+            await Until(() => !list.LabelEditInProgress());
             await Task.Delay(100);
             afterEdit.Invoke(list, [new LabelEditEventArgs(index, "重新命名.txt")]);
             await Until(() => File.Exists(Path.Combine(destination, "重新命名.txt")) && !Busy());

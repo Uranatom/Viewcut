@@ -12,7 +12,7 @@ internal sealed class RenameClipDialog : Form
         SuspendLayout();
         AutoScaleDimensions = new SizeF(96, 96);
         AutoScaleMode = AutoScaleMode.Dpi;
-        Font = new Font("Segoe UI Variable Text", 9.5f);
+        Font = new Font(UiFonts.Text, 9.5f);
         Text = L.T(title);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = MinimizeBox = false;

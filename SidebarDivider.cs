@@ -4,6 +4,11 @@ internal sealed class SidebarDivider : Control
 {
     private readonly TableLayoutPanel layout;
     private bool dragging;
+    private bool changed;
+    private int grabOffset;
+    private int? pendingPosition;
+    private int lastPosition;
+    private readonly System.Windows.Forms.Timer frame = new() { Interval = 15 };
     private readonly Action<int> move;
     private readonly Action finished;
 
@@ -18,6 +23,8 @@ internal sealed class SidebarDivider : Control
         BackColor = EditorTheme.Background;
         AccessibleName = horizontal ? L.T("调整时间轴高度") : L.T("调整侧边栏宽度");
         Horizontal = horizontal;
+        SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+        frame.Tick += (_, _) => ApplyPendingPosition();
     }
 
     private bool Horizontal { get; }
@@ -35,6 +42,11 @@ internal sealed class SidebarDivider : Control
     {
         base.OnMouseDown(e);
         if (e.Button != MouseButtons.Left) return;
+        if (dragging) return;
+        grabOffset = Horizontal ? e.Y : e.X;
+        lastPosition = Horizontal ? Top : Left;
+        pendingPosition = null;
+        changed = false;
         dragging = Capture = true;
         BackColor = EditorTheme.Border;
     }
@@ -43,24 +55,58 @@ internal sealed class SidebarDivider : Control
     {
         base.OnMouseMove(e);
         if (!dragging) return;
-        var point = layout.PointToClient(PointToScreen(e.Location));
-        move(Horizontal ? point.Y : point.X);
+        QueuePosition(e.Location);
     }
 
     protected override void OnMouseUp(MouseEventArgs e)
     {
         base.OnMouseUp(e);
-        if (!dragging) return;
-        dragging = Capture = false;
-        BackColor = EditorTheme.Background;
-        finished();
+        if (!dragging || e.Button != MouseButtons.Left) return;
+        QueuePosition(e.Location);
+        EndDrag();
+        Capture = false;
     }
 
     protected override void OnMouseCaptureChanged(EventArgs e)
     {
         base.OnMouseCaptureChanged(e);
-        if (Capture) return;
+        if (!Capture && dragging) EndDrag();
+    }
+
+    private void QueuePosition(Point location)
+    {
+        var point = layout.PointToClient(PointToScreen(location));
+        pendingPosition = (Horizontal ? point.Y : point.X) - grabOffset;
+        if (!frame.Enabled) frame.Start();
+    }
+
+    private void ApplyPendingPosition()
+    {
+        frame.Stop();
+        if (pendingPosition is not { } position) return;
+        pendingPosition = null;
+        if (position == lastPosition) return;
+        var before = Horizontal ? Top : Left;
+        move(position);
+        lastPosition = position;
+        changed |= before != (Horizontal ? Top : Left);
+    }
+
+    private void EndDrag()
+    {
         dragging = false;
+        ApplyPendingPosition();
         BackColor = EditorTheme.Background;
+        if (changed) finished();
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            dragging = false;
+            frame.Dispose();
+        }
+        base.Dispose(disposing);
     }
 }

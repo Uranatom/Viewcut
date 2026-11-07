@@ -2,3 +2,4 @@
 artifacts/
 bin/
 obj/
+web/node_modules/

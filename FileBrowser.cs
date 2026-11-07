@@ -12,7 +12,7 @@ internal sealed partial class FileBrowser : UserControl
 {
     private readonly TextBox address = new() { Dock = DockStyle.Fill, BorderStyle = BorderStyle.None };
     private readonly TextBox search = new() { Dock = DockStyle.Fill, BorderStyle = BorderStyle.None, PlaceholderText = L.T("搜索当前文件夹") };
-    private readonly ListView entries = new() { Dock = DockStyle.Fill, VirtualMode = true, OwnerDraw = true,
+    private readonly ListView entries = new BufferedListView { Dock = DockStyle.Fill, VirtualMode = true, OwnerDraw = true,
         BorderStyle = BorderStyle.None, MultiSelect = true, HideSelection = false, ShowItemToolTips = true,
         LabelEdit = true, AllowDrop = true };
     private readonly TreeView places = new() { Dock = DockStyle.Fill, BorderStyle = BorderStyle.None,
@@ -347,8 +347,8 @@ internal sealed partial class FileBrowser : UserControl
         e.Graphics.FillRectangle(fill, rect);
         var left = Scale(8) + e.Node.Level * places.Indent;
         var iconBounds = new Rectangle(left, rect.Top, Scale(24), rect.Height);
-        using var iconFont = new Font("Segoe Fluent Icons", Scale(16), GraphicsUnit.Pixel);
-        TextRenderer.DrawText(e.Graphics, e.Node.Parent is not null ? "\uEDA2" : "\uE8B7", iconFont,
+        using var iconFont = new Font(UiFonts.Icons, Scale(16), GraphicsUnit.Pixel);
+        TextRenderer.DrawText(e.Graphics, UiFonts.Glyph(e.Node.Parent is not null ? "\uEDA2" : "\uE8B7"), iconFont,
             iconBounds, e.Node.Parent is not null ? EditorTheme.Muted : EditorTheme.Folder,
             TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
         var textLeft = iconBounds.Right + Scale(8);
@@ -382,7 +382,7 @@ internal sealed partial class FileBrowser : UserControl
         }
         else
         {
-            using var iconFont = new Font("Segoe Fluent Icons", Scale(50), GraphicsUnit.Pixel);
+            using var iconFont = new Font(UiFonts.Icons, Scale(50), GraphicsUnit.Pixel);
             TextRenderer.DrawText(e.Graphics, entry.Directory ? "\uE8B7" : entry.Video ? "\uE714" : "\uE8A5", iconFont,
                 imageBounds, entry.Directory ? EditorTheme.Folder : EditorTheme.Accent,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
@@ -409,7 +409,7 @@ internal sealed partial class FileBrowser : UserControl
         var bounds = e.Bounds;
         if (e.ColumnIndex == 0)
         {
-            using var iconFont = new Font("Segoe Fluent Icons", Scale(16), GraphicsUnit.Pixel);
+            using var iconFont = new Font(UiFonts.Icons, Scale(16), GraphicsUnit.Pixel);
             TextRenderer.DrawText(e.Graphics, entry.Directory ? "\uE8B7" : entry.Video ? "\uE714" : "\uE8A5",
                 iconFont, new Rectangle(bounds.X + Scale(4), bounds.Y, Scale(24), bounds.Height),
                 entry.Directory ? EditorTheme.Folder : EditorTheme.Muted,
@@ -501,9 +501,10 @@ internal sealed partial class FileBrowser : UserControl
             if (available <= 0) return;
             var name = Math.Max(available / 3, available - date - size);
             date = Math.Max(0, Math.Min(date, (available - name) * 3 / 5));
-            entries.Columns[0].Width = name;
-            entries.Columns[1].Width = date;
-            entries.Columns[2].Width = available - name - date;
+            var remaining = available - name - date;
+            if (entries.Columns[0].Width != name) entries.Columns[0].Width = name;
+            if (entries.Columns[1].Width != date) entries.Columns[1].Width = date;
+            if (entries.Columns[2].Width != remaining) entries.Columns[2].Width = remaining;
         }
         finally { fittingColumns = false; }
     }
@@ -523,6 +524,11 @@ internal sealed partial class FileBrowser : UserControl
     }
 
     private int Scale(int value) => (int)Math.Round(value * DeviceDpi / 96d);
+
+    private sealed class BufferedListView : ListView
+    {
+        public BufferedListView() => DoubleBuffered = true;
+    }
 
     protected override void Dispose(bool disposing)
     {

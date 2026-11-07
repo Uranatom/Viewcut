@@ -89,13 +89,13 @@ internal sealed class FluentButton : Button
         }
         else
         {
-            using var font = new Font("Segoe Fluent Icons", 16 * scale, GraphicsUnit.Pixel);
-            TextRenderer.DrawText(e.Graphics, Icon, font, iconBounds, color,
+            using var font = new Font(UiFonts.Icons, 16 * scale, GraphicsUnit.Pixel);
+            TextRenderer.DrawText(e.Graphics, UiFonts.Glyph(Icon), font, iconBounds, color,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
         }
         if (ButtonIcons.Badge(Text) is { } badge)
         {
-            using var font = new Font("Segoe UI Variable Text", 9 * scale, FontStyle.Bold, GraphicsUnit.Pixel);
+            using var font = new Font(UiFonts.Text, 9 * scale, FontStyle.Bold, GraphicsUnit.Pixel);
             var size = TextRenderer.MeasureText(badge, font, Size.Empty, TextFormatFlags.NoPadding);
             var bounds = new Rectangle(Width - size.Width - (int)(3 * scale), (int)(2 * scale), size.Width + (int)(2 * scale), (int)(12 * scale));
             using var badgeFill = new SolidBrush(Emphasized ? EditorTheme.Surface : EditorTheme.Accent);

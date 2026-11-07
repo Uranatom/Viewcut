@@ -62,11 +62,11 @@ internal sealed class MainWindow : Form
         StartPosition = FormStartPosition.CenterScreen;
         AutoScaleDimensions = new SizeF(96, 96);
         AutoScaleMode = AutoScaleMode.Dpi;
-        Font = new Font("Segoe UI Variable Text", 9.5f);
+        Font = new Font(UiFonts.Text, 9.5f);
         BackColor = EditorTheme.Background;
         ForeColor = EditorTheme.Text;
-        time.Font = new Font("Segoe UI Variable Text", 10);
-        time.AutoSize = true;
+        time.Font = new Font(UiFonts.Text, 10);
+        time.AutoSize = false;
         time.Margin = new Padding(12, 0, 6, 0);
         time.ForeColor = EditorTheme.Accent;
         time.BackColor = EditorTheme.Surface;
@@ -110,7 +110,7 @@ internal sealed class MainWindow : Form
         sectionNav.Controls.AddRange(sectionButtons);
         var sectionBody = new Panel { Dock = DockStyle.Fill, Margin = Padding.Empty };
         sectionBody.Controls.AddRange(sections);
-        var sidebar = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1,
+        var sidebar = new BufferedLayout { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1,
             BackColor = EditorTheme.Surface, Margin = Padding.Empty };
         sidebar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         sidebar.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -122,7 +122,7 @@ internal sealed class MainWindow : Form
         split.Controls.Add(sidebar, 2, 0);
         split.Controls.Add(new SidebarDivider(split, horizontal: false, x =>
         {
-            var width = Math.Max(1, split.ClientSize.Width - LogicalToDeviceUnits(7));
+            var width = Math.Max(1, split.ClientSize.Width - (int)split.ColumnStyles[1].Width);
             ApplySidebarWidth((width - x) / (double)width);
         }, () =>
         {
@@ -133,18 +133,23 @@ internal sealed class MainWindow : Form
 
         void ApplySidebarWidth(double preferred)
         {
-            var width = Math.Max(1, split.ClientSize.Width - LogicalToDeviceUnits(7));
+            var width = Math.Max(1, split.ClientSize.Width - (int)split.ColumnStyles[1].Width);
             var min = Math.Min(0.62, Math.Max(0.28, LogicalToDeviceUnits(390) / (double)width));
             var max = Math.Max(min, Math.Min(0.62, 1 - LogicalToDeviceUnits(320) / (double)width));
             var value = Math.Clamp(double.IsFinite(preferred) ? preferred : 0.4, min, max);
-            split.ColumnStyles[0].Width = (float)(100 * (1 - value));
-            split.ColumnStyles[2].Width = (float)(100 * value);
+            var percent = (float)(100 * value);
+            if (split.ColumnStyles[2].Width == percent) return;
+            split.SuspendLayout();
+            split.ColumnStyles[0].Width = 100 - percent;
+            split.ColumnStyles[2].Width = percent;
+            split.ResumeLayout(true);
+            sidebar.Invalidate(true);
         }
         ShowSection(0);
 
         var toolbar = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = true, AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink, Margin = Padding.Empty, Padding = new Padding(2, 3, 0, 9) };
-        var wordmark = new Label { Text = "Viewcut", AutoSize = true, Font = new Font("Segoe UI Variable Display Semib", 16),
+        var wordmark = new Label { Text = "Viewcut", AutoSize = true, Font = new Font(UiFonts.Display, 16),
             Margin = new Padding(0, 1, 22, 1), ForeColor = EditorTheme.Text, AccessibleName = "Viewcut" };
         preferences.AccessibleName = "Viewcut Preferences";
         preferences.Click += (_, _) =>
@@ -161,12 +166,21 @@ internal sealed class MainWindow : Form
         Emphasize(exportAll, true);
         transport.Controls.AddRange([pause, Button(L.T("P  上一条"), () => MoveFile(-1)), Button(L.T("N  下一条"), () => MoveFile(1)),
             Button(L.T("I  起点"), MarkStart), Button(L.T("O  终点"), MarkEnd)]);
-        var transportBar = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 1, ColumnCount = 2, Margin = Padding.Empty };
+        var transportBar = new BufferedLayout { Dock = DockStyle.Fill, RowCount = 1, ColumnCount = 2, Margin = Padding.Empty };
         transportBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        transportBar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        transportBar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute));
         transportBar.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         transportBar.Controls.Add(transport, 0, 0);
         transportBar.Controls.Add(time, 1, 0);
+        void FitClock()
+        {
+            // Keep playback ticks from relaying out the transport controls during a drag.
+            var textWidth = TextRenderer.MeasureText("88:88:88.88 / 88:88:88.88", time.Font).Width;
+            transportBar.ColumnStyles[1].Width = textWidth + time.Padding.Horizontal + time.Margin.Horizontal;
+        }
+        time.FontChanged += (_, _) => FitClock();
+        time.DpiChangedAfterParent += (_, _) => FitClock();
+        FitClock();
 
         var timelineHeader = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = true, AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink, Margin = Padding.Empty, Padding = new Padding(8, 5, 8, 5) };
@@ -178,7 +192,7 @@ internal sealed class MainWindow : Form
         ]);
         undo.Click += (_, _) => ApplyHistory(false);
         redo.Click += (_, _) => ApplyHistory(true);
-        var timelinePanel = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1,
+        var timelinePanel = new BufferedLayout { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1,
             BackColor = EditorTheme.Surface, Margin = Padding.Empty };
         timelinePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         timelinePanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -202,8 +216,8 @@ internal sealed class MainWindow : Form
         layout.Controls.Add(new SidebarDivider(layout, horizontal: true, y =>
         {
             var available = split.Height + timelinePanel.Height;
-            var bottom = layout.ClientSize.Height - layout.Padding.Bottom - layout.RowStyles[5].Height;
-            timelineFraction = ApplyTimelineHeight((int)(bottom - y) - LogicalToDeviceUnits(7), available);
+            var bottom = timelinePanel.Bottom;
+            timelineFraction = ApplyTimelineHeight(bottom - y - (int)layout.RowStyles[3].Height, available);
         }, () =>
         {
             store.Data.TimelineFraction = timelineFraction;
@@ -225,7 +239,13 @@ internal sealed class MainWindow : Form
             var minimum = headerHeight + timeline.GetPreferredSize(Size.Empty).Height;
             var maximum = Math.Max(minimum, available - LogicalToDeviceUnits(245));
             var value = Math.Clamp(height, minimum, maximum);
-            if (layout.RowStyles[4].Height != value) layout.RowStyles[4].Height = value;
+            if (layout.RowStyles[4].Height != value)
+            {
+                layout.RowStyles[4].Height = value;
+                transportBar.Invalidate(true);
+                timelinePanel.Invalidate(true);
+                sidebar.Invalidate(true);
+            }
             return value / (double)Math.Max(1, available);
         }
         layout.SizeChanged += (_, _) => FitTimeline();
@@ -963,7 +983,7 @@ internal sealed class MainWindow : Form
         if (current is not null) return;
         var center = video.ClientRectangle;
         center.Height = Math.Max(0, center.Height - 24);
-        using var title = new Font("Segoe UI Variable Text", LogicalToDeviceUnits(22), GraphicsUnit.Pixel);
+        using var title = new Font(UiFonts.Text, LogicalToDeviceUnits(22), GraphicsUnit.Pixel);
         const TextFormatFlags flags = TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter;
         TextRenderer.DrawText(e.Graphics, L.T("打开素材开始粗筛"), title, center, EditorTheme.VideoText, flags);
         center.Offset(0, 32);
