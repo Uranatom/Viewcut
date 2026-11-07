@@ -261,7 +261,7 @@ function pumpPreview() {
   catch (error) { previewBusy = false; previewTarget = at; if (error.name !== 'InvalidStateError') throw error; return; }
   if (!previewPrimed) {
     const generation = loadTicket; previewPriming = true;
-    previewVideo.play().then(() => { if (generation !== loadTicket) return; previewVideo.pause(); previewPrimed = true; previewPriming = false; paintPreview(); pumpPreview(); })
+    previewVideo.play().then(() => { if (generation !== loadTicket) return; previewVideo.pause(); previewPrimed = true; previewPriming = false; previewBusy = false; paintPreview(); pumpPreview(); })
       .catch(() => { if (generation === loadTicket) { previewPriming = false; previewBusy = false; paintPreview(); } });
   }
 }

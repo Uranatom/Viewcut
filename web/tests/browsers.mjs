@@ -61,8 +61,11 @@ try {
       const handle = await page.locator('.segment').first().locator('.handle.end').boundingBox();
       await page.mouse.move(handle.x + 4,handle.y + 15); await page.mouse.down(); await page.mouse.move(handle.x + 60,handle.y + 15,{steps:12}); await page.mouse.up();
       await page.locator('#timelineViewport').focus(); await page.keyboard.press(command+'+z'); await page.keyboard.press(command+'+Shift+z');
-      const timeline = await page.locator('#track').boundingBox(); await page.mouse.move(timeline.x + timeline.width*.5,timeline.y + 52);
+      const timeline = await page.locator('#track').boundingBox(); await page.mouse.move(timeline.x + 1,timeline.y + 52);
+      await page.waitForFunction(() => document.querySelector('#previewVideo').readyState >= 2 && document.querySelector('#previewVideo').paused);
+      await page.mouse.move(timeline.x + timeline.width*.5,timeline.y + 52);
       await page.waitForFunction(() => !document.querySelector('#preview').hidden);
+      await page.waitForFunction(() => Math.abs(document.querySelector('#previewVideo').currentTime-4.5)<.15);
       await page.waitForFunction(() => { const c = document.querySelector('#preview canvas'); return c.getContext('2d').getImageData(0,0,c.width,c.height).data.some((n,i) => i % 4 !== 3 && n > 10); });
       const before = await page.locator('#sidebar').evaluate(e => e.clientWidth), divider = await page.locator('#verticalDivider').boundingBox();
       await page.mouse.move(divider.x+3,divider.y+100); await page.mouse.down(); await page.mouse.move(divider.x-90,divider.y+100,{steps:20}); await page.mouse.up();
