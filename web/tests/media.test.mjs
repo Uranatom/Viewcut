@@ -9,7 +9,7 @@ import { indexFile,planCut,writeCut } from '../mp4.js';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
 const directory = path.join(root,'artifacts','web-media');
 const tools = process.env.VIEWCUT_TEST_TOOLS || path.join(root,'.tools','ffmpeg');
-const ffmpeg = path.join(tools,'ffmpeg.exe'), ffprobe = path.join(tools,'ffprobe.exe');
+const ffmpeg = path.join(tools,process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg'), ffprobe = path.join(tools,process.platform === 'win32' ? 'ffprobe.exe' : 'ffprobe');
 function ff(...args) { return execFileSync(ffmpeg,['-v','error',...args],{windowsHide:true,timeout:60000}).toString(); }
 function probe(filename) { return JSON.parse(execFileSync(ffprobe,['-v','error','-show_format','-show_streams','-of','json',filename],{windowsHide:true}).toString()); }
 async function saveCut(file,plan,filename) { const handle = await open(filename,'w'); await writeCut(file,plan,{write:async data => handle.write(data instanceof Blob ? new Uint8Array(await data.arrayBuffer()) : data),close:() => handle.close(),abort:() => handle.close()}); }

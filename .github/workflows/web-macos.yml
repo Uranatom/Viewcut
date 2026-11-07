@@ -1,0 +1,59 @@
+name: Web macOS compatibility
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['web/**', 'launcher/**', '.github/workflows/web-macos.yml']
+permissions:
+  contents: read
+jobs:
+  mac:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            rid: osx-arm64
+          - os: macos-15-intel
+            rid: osx-x64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - name: Prepare browser and fixtures
+        run: |
+          command -v ffmpeg || brew install ffmpeg
+          echo "VIEWCUT_TEST_TOOLS=$(dirname "$(command -v ffmpeg)")" >> "$GITHUB_ENV"
+          echo "VIEWCUT_PLAYWRIGHT=$GITHUB_WORKSPACE/web/node_modules/playwright/index.mjs" >> "$GITHUB_ENV"
+          npm install --prefix web --no-save --package-lock=false playwright@1.62.1
+          web/node_modules/.bin/playwright install webkit
+      - name: Media, portable export and macOS WebKit
+        run: |
+          node --test web/tests/model.test.mjs web/tests/media.test.mjs web/tests/portable.test.mjs
+          node web/tests/safari.mjs
+      - name: Native launcher
+        run: |
+          dotnet publish launcher/Viewcut.Web.csproj -c Release -r ${{ matrix.rid }} -p:PublishAot=true -o artifacts/WebLauncher/${{ matrix.rid }}
+          node launcher/mac-tests.mjs
+          python3 launcher/package-mac.py ${{ matrix.rid }}
+      - name: Real Safari acceptance
+        continue-on-error: true
+        run: |
+          sudo /usr/bin/safaridriver --enable
+          node web/tests/safari-native.mjs
+      - name: Collect app and verification results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: Viewcut-Web-${{ matrix.rid }}
+          path: |
+            artifacts/WebLauncher/*.zip
+            artifacts/web-safari/
+            artifacts/safari-native/
+          retention-days: 14

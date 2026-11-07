@@ -41,5 +41,7 @@
   <dialog id="preferences"><form method="dialog"><header><h2 data-i18n="preferences"></h2><button data-action="close" value="close"></button></header><label for="language" data-i18n="language"></label><select id="language"><option value="zh-CN">简体中文</option><option value="en-US">English</option></select><label for="theme" data-i18n="theme"></label><select id="theme"><option value="dark" data-i18n="dark"></option><option value="light" data-i18n="light"></option><option value="system" data-i18n="system"></option></select><p class="muted" data-i18n="autoSave"></p></form></dialog>
   <dialog id="renameDialog"><form><h2 data-i18n="renameClip"></h2><input id="clipName" maxlength="100" autocomplete="off"><p id="renameError" role="alert"></p><div class="dialog-actions"><button type="button" data-action="cancelRename"></button><button type="submit" data-action="confirmRename" class="accent"></button></div></form></dialog>
   <input id="fileInput" type="file" accept="video/*,.mov,.mp4" multiple hidden>
+  <input id="folderInput" type="file" webkitdirectory multiple hidden>
+  <dialog id="downloadDialog"><form method="dialog"><h2 data-i18n="downloadReady"></h2><p data-i18n="downloadHelp"></p><div class="dialog-actions"><button type="button" data-action="downloadZip" class="accent"></button><button value="close" data-action="close"></button></div></form></dialog>
   <video id="previewVideo" muted playsinline preload="metadata" hidden></video>
 </body></html>

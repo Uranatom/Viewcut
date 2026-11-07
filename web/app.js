@@ -2,6 +2,9 @@ import { Editor, outputName, validateName, copy } from './model.js';
 import { t, setLanguage } from './i18n.js';
 import { icon } from './icons.js';
 import { saveHandle, loadHandle, permission } from './storage.js';
+import { additive,hasDirectoryAccess,isMac,shortcut } from './platform.js';
+import { importedDirectory } from './portable.js';
+import { keepLauncherAlive } from './host.js';
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
 const player = $('#player'), previewVideo = $('#previewVideo'), viewport = $('#timelineViewport'), track = $('#track');
@@ -11,7 +14,9 @@ let language = preferences.language || 'zh-CN', theme = preferences.theme || 'da
 let editor = new Editor(), active = null, sourceKey = '', url = null, destination = null, root = null, folders = [], entries = [], visible = [], selectedFiles = new Set(), fileAnchor = 0, page = 'files', largeIcons = preferences.largeIcons || false;
 let history = [], historyAt = -1, fileClipboard = null, busyFiles = false, exportWorker = null, jobs = [], duration = 0, zoom = 1, saveTimer, previewTarget = null, previewBusy = false, loadTicket = 0, folderTicket = 0, sourceReady = false, previewReady = false;
 let rootId = '', knownRoots;
+let downloadUrl = null, downloadFilename = '';
 async function rootIdentity(handle) {
+  if (handle.virtual) return 'import:' + handle.name;
   knownRoots ??= await loadHandle('knownRoots').catch(() => []) || [];
   for (const item of knownRoots) if (await item.handle.isSameEntry(handle)) return item.id;
   const id = crypto.randomUUID(); knownRoots.push({handle,id}); knownRoots = knownRoots.slice(-32);
@@ -48,13 +53,13 @@ function localize() {
   setLanguage(language); document.documentElement.lang = language; preferences.language = language; preferences.theme = theme; applyTheme();
   $$('[data-i18n]').forEach(e => e.textContent = t(e.dataset.i18n));
   $$('button[data-action]').forEach(button => {
-    const action = button.dataset.action; button.innerHTML = icon(action); button.title = t(action); button.setAttribute('aria-label', t(action));
+    const action = button.dataset.action; button.innerHTML = icon(action); button.title = shortcut(t(action)); button.setAttribute('aria-label', shortcut(t(action)));
     if (!['close','confirmRename'].includes(action)) button.type = 'button';
   });
   $('#search').placeholder = t('search'); $('#search').setAttribute('aria-label', t('search'));
   $('#language').value = language; $('#theme').value = theme;
   $('#activeName').textContent = active?.file.name || t('notLoaded'); $('#mediaName').textContent = active?.file.name || t('openFile');
-  $('#destinationLabel').textContent = destination?.name || ''; renderAll(); status(t('ready')); persist();
+  $('#destinationLabel').textContent = destination?.name || (!hasDirectoryAccess ? t('browserDownloads') : ''); renderAll(); status(t('ready')); persist();
 }
 function buttons() {
   for (const name of ['play','markIn','markOut','fit','zoomIn','zoomOut']) $(`[data-action="${name}"]`).disabled = !sourceReady;
@@ -62,7 +67,9 @@ function buttons() {
   $('[data-action=undo]').disabled = !editor.undoStack.length; $('[data-action=redo]').disabled = !editor.redoStack.length;
   const exp = $('[data-action=export]'); exp.disabled = !sourceReady || !editor.clips.length || !!exportWorker;
   exp.innerHTML = icon('export') + (editor.clips.length ? `<span class="badge">${editor.clips.length}</span>` : '');
-  $('[data-action=showDestination]').disabled = !destination;
+  $('[data-action=showDestination]').disabled = !hasDirectoryAccess && !downloadUrl || hasDirectoryAccess && !destination;
+  $('[data-action=destination]').disabled = !hasDirectoryAccess;
+  if (!hasDirectoryAccess) { $('[data-action=destination]').title = t('browserDownloadsHelp'); $('[data-action=showDestination]').title = t('downloadReady'); }
   $('[data-action=back]').disabled = historyAt <= 0; $('[data-action=forward]').disabled = historyAt >= history.length - 1; $('[data-action=up]').disabled = folders.length < 2;
   $('[data-action=grid]').classList.toggle('selected', largeIcons); $('[data-action=list]').classList.toggle('selected', !largeIcons);
   $('[data-action=play]').innerHTML = icon(player.paused ? 'play' : 'pause');
@@ -138,7 +145,8 @@ async function navigate(nextFolders, remember = true) {
     await new Promise(resolve => setTimeout(resolve,0));
   }
 }
-async function openFolder() { const handle = await showDirectoryPicker({id:'viewcut-source',mode:'read'}); await saveHandle('root',handle).catch(() => {}); await navigate([handle]); }
+async function openFolder() { if (!hasDirectoryAccess) { $('#folderInput').click(); return; } const handle = await showDirectoryPicker({id:'viewcut-source',mode:'read'}); await saveHandle('root',handle).catch(() => {}); await navigate([handle]); }
+$('#folderInput').onchange = () => run(async () => { const directory = importedDirectory([...$('#folderInput').files]); if (directory) { await navigate([directory]); status(t('portableFolder')); } });
 async function getFile(entry) { return entry.file || entry.handle.getFile(); }
 async function openEntry(entry) { if (entry.kind === 'directory') return navigate([...folders,entry.handle]); await openVideo(entry); }
 async function openVideo(entry) {
@@ -155,10 +163,10 @@ function adjacent(direction) { const videos = videoEntries(), index = videos.fin
 async function chooseDestination() { destination = await showDirectoryPicker({ id:'viewcut-destination',mode:'readwrite' }); $('#destinationLabel').textContent = destination.name; await saveHandle('destination',destination).catch(() => {}); buttons(); }
 async function exportAll() {
   if (exportWorker || !editor.clips.length || !sourceReady) return;
-  if (!destination) await chooseDestination(); else await permission(destination,'readwrite');
+  if (hasDirectoryAccess) { if (!destination) await chooseDestination(); else await permission(destination,'readwrite'); }
   await changedSource();
   const clips = editor.snapshot(), file = active.file;
-  const existing = new Set(); for await (const name of destination.keys()) existing.add(name.toLocaleLowerCase());
+  const existing = new Set(); if (destination) for await (const name of destination.keys()) existing.add(name.toLocaleLowerCase());
   for (const clip of clips) { const name = outputName(file.name,clip).toLocaleLowerCase(); if (existing.has(name)) throw new Error('existingOutput'); existing.add(name); }
   jobs = clips.map(c => ({id:c.id,name:outputName(file.name,c),state:'waiting'})); renderJobs();
   exportWorker = new Worker(new URL('./export-worker.js',import.meta.url),{type:'module'}); $('#progress').hidden = false; $('#progress').value = 0; $('#cancelExport').hidden = false; buttons();
@@ -168,11 +176,11 @@ async function exportAll() {
     if (data.type === 'running') { jobs.find(j => j.id === data.id).state = 'exporting'; status(`${t('exporting')} · ${data.name}`); renderJobs(); }
     if (data.type === 'progress') $('#progress').value = data.value;
     if (data.type === 'done') { Object.assign(jobs.find(j => j.id === data.id),data,{state:'done'}); renderJobs(); }
-    if (data.type === 'complete') { finish(); status(`${t('done')} · ${data.count} ${t('clips')}`); }
+    if (data.type === 'complete') { finish(); if (data.archive) { if (downloadUrl) URL.revokeObjectURL(downloadUrl); downloadUrl = URL.createObjectURL(data.archive); downloadFilename = file.name.replace(/\.[^.]+$/,'') + '-Viewcut.zip'; $('#downloadDialog').showModal(); buttons(); } status(`${t('done')} · ${data.count} ${t('clips')}`); }
     if (data.type === 'error') { const job = jobs.find(j => j.state === 'exporting'); if (job) job.state = 'failed'; finish(); report(new Error(data.key)); }
   };
   exportWorker.onerror = error => { finish(); report(new Error(error.message)); };
-  exportWorker.postMessage({file,clips,directory:destination});
+  exportWorker.postMessage({file,clips,directory:hasDirectoryAccess ? destination : null});
 }
 function renameClip(id) {
   const clip = editor.clips.find(c => c.id === id); if (!clip) return;
@@ -189,12 +197,12 @@ $('#renameDialog form').onsubmit = event => { event.preventDefault(); run(async 
 }); };
 function menu(event, items) {
   event.preventDefault(); const e = $('#contextMenu'); e.replaceChildren();
-  for (const [label,action,glyph,key,disabled] of items) { const b = element('button'); b.setAttribute('role','menuitem'); b.innerHTML = icon(glyph || label); b.append(document.createTextNode(t(label))); if (key) b.append(element('kbd','',key)); b.disabled = !!disabled; b.onclick = () => { e.hidden = true; run(action); }; e.append(b); }
+  for (const [label,action,glyph,key,disabled] of items) { const b = element('button'); b.setAttribute('role','menuitem'); b.innerHTML = icon(glyph || label); b.append(document.createTextNode(t(label))); if (key) b.append(element('kbd','',shortcut(key))); b.disabled = !!disabled; b.onclick = () => { e.hidden = true; run(action); }; e.append(b); }
   e.hidden = false; const rect = e.getBoundingClientRect(); e.style.left = Math.max(4,Math.min(event.clientX,innerWidth - rect.width - 6)) + 'px'; e.style.top = Math.max(4,Math.min(event.clientY,innerHeight - rect.height - 6)) + 'px'; e.querySelector('button:not(:disabled)')?.focus();
 }
 function clipMenu(event) { const clip = event.target.closest('[data-id]'); if (!clip) return; if (!editor.selection.has(clip.dataset.id)) selectClip(clip.dataset.id,false); menu(event,[['rename',() => renameClip(clip.dataset.id),'rename','F2',editor.selection.size > 1],[editor.selection.size > 1 ? 'removeSelected' : 'remove',() => { editor.remove(); edited(); },'remove','Del']]); }
 $('#clipLayer').oncontextmenu = clipMenu; $('#clipList').oncontextmenu = clipMenu;
-$('#clipList').onclick = event => { const card = event.target.closest('[data-id]'); if (card) selectClip(card.dataset.id,event.ctrlKey || event.metaKey); };
+$('#clipList').onclick = event => { const card = event.target.closest('[data-id]'); if (card) selectClip(card.dataset.id,additive(event)); };
 $('#clipList').ondblclick = event => { const clip = editor.clips.find(c => c.id === event.target.closest('[data-id]')?.dataset.id); if (clip) player.currentTime = clip.start; };
 function markIn() { if (!sourceReady) return; editor.mark = player.currentTime; status(t('marked')); renderTimeline(); }
 function markOut() { if (!sourceReady) return; if (editor.mark === null) { status(t('needMark')); return; } editor.add(editor.mark,player.currentTime); editor.mark = null; edited(); status(t('ready')); }
@@ -204,7 +212,7 @@ let drag = null;
 track.onpointerdown = event => {
   if (event.button !== 0 || !sourceReady) return;
   const segment = event.target.closest('.segment'), edge = event.target.closest('[data-edge]')?.dataset.edge;
-  if (segment) { const id = segment.dataset.id; if (!editor.selection.has(id) || event.ctrlKey) selectClip(id,event.ctrlKey); if (!edge) return; drag = { clip:editor.clips.find(c => c.id === id),edge,before:editor.snapshot() }; player.pause(); }
+  if (segment) { const id = segment.dataset.id; if (!editor.selection.has(id) || additive(event)) selectClip(id,additive(event)); if (!edge) return; drag = { clip:editor.clips.find(c => c.id === id),edge,before:editor.snapshot() }; player.pause(); }
   else { drag = {seek:true}; player.currentTime = timeAt(event.clientX); }
   event.preventDefault(); track.focus(); track.setPointerCapture(event.pointerId);
 };
@@ -264,8 +272,8 @@ let resizeFrame; new ResizeObserver(() => { cancelAnimationFrame(resizeFrame); r
 $('#fileList').onclick = event => {
   const row = event.target.closest('[data-index]'); if (!row) { selectedFiles.clear(); renderFileSelection(); return; }
   const index = Number(row.dataset.index), entry = visible[index];
-  if (event.shiftKey) { if (!event.ctrlKey) selectedFiles.clear(); for (let i = Math.min(fileAnchor,index); i <= Math.max(fileAnchor,index); i++) if (visible[i]) selectedFiles.add(visible[i].name); }
-  else { if (!event.ctrlKey && !event.metaKey) selectedFiles.clear(); if ((event.ctrlKey || event.metaKey) && selectedFiles.has(entry.name)) selectedFiles.delete(entry.name); else selectedFiles.add(entry.name); fileAnchor = index; }
+  if (event.shiftKey) { if (!additive(event)) selectedFiles.clear(); for (let i = Math.min(fileAnchor,index); i <= Math.max(fileAnchor,index); i++) if (visible[i]) selectedFiles.add(visible[i].name); }
+  else { if (!additive(event)) selectedFiles.clear(); if (additive(event) && selectedFiles.has(entry.name)) selectedFiles.delete(entry.name); else selectedFiles.add(entry.name); fileAnchor = index; }
   renderFileSelection(); $('#fileList').focus();
 };
 function renderFileSelection() { for (const row of $$('.file-row')) { const selected = selectedFiles.has(visible[Number(row.dataset.index)].name); row.classList.toggle('selected',selected); row.setAttribute('aria-selected',selected); } $('#fileFooter').textContent = `${visible.length} ${t('items')} · ${t('selected')} ${selectedFiles.size}`; }
@@ -274,8 +282,8 @@ let rubber = null, suppressFileClick = false;
 $('#fileList').addEventListener('pointerdown', event => {
   if (event.button !== 0 || event.target.closest('.file-row')) return;
   const list = $('#fileList'), rect = list.getBoundingClientRect();
-  rubber = { x:event.clientX - rect.left + list.scrollLeft,y:event.clientY - rect.top + list.scrollTop,initial:event.ctrlKey ? new Set(selectedFiles) : new Set(),pointer:event.pointerId };
-  if (!event.ctrlKey) selectedFiles.clear(); list.setPointerCapture(event.pointerId);
+  rubber = { x:event.clientX - rect.left + list.scrollLeft,y:event.clientY - rect.top + list.scrollTop,initial:additive(event) ? new Set(selectedFiles) : new Set(),pointer:event.pointerId };
+  if (!additive(event)) selectedFiles.clear(); list.setPointerCapture(event.pointerId);
 });
 $('#fileList').addEventListener('pointermove', event => {
   if (!rubber) return; const list = $('#fileList'), rect = list.getBoundingClientRect();
@@ -305,7 +313,7 @@ async function copyEntry(entry,directory,name = entry.name) {
     catch (error) { await stream?.abort().catch(() => {}); await directory.removeEntry(name).catch(() => {}); throw error; }
   }
 }
-async function fileOperation(action) { if (busyFiles) return; busyFiles = true; try { await action(); status(t('fileOperationDone')); if (folders.length) await navigate(folders,false); } finally { busyFiles = false; } }
+async function fileOperation(action) { if (folders.at(-1)?.virtual) throw new Error('readOnlyFolder'); if (busyFiles) return; busyFiles = true; try { await action(); status(t('fileOperationDone')); if (folders.length) await navigate(folders,false); } finally { busyFiles = false; } }
 async function deleteFiles() { const items = selectedEntries(); if (!items.length) return; if (!confirm(t('deleteFiles') + '\n\n' + items.map(e => e.name).join('\n'))) return; await fileOperation(async () => { const directory = currentDirectory(); await permission(directory,'readwrite'); for (const entry of items) { await directory.removeEntry(entry.name,{recursive:entry.kind === 'directory'}); if (isActive(entry)) { player.pause(); sourceReady = false; buttons(); } } }); }
 function clipboardFiles(cut = false) { fileClipboard = {entries:selectedEntries(),cut,directory:folders.at(-1)}; status(t(cut ? 'cutReady' : 'clipboardReady')); }
 async function pasteFiles() {
@@ -331,14 +339,15 @@ async function newFolder() { const name = prompt(t('newFolderName')); if (name =
 function properties() { const items = selectedEntries(); alert(items.map(e => `${e.name}${e.size === undefined ? '' : '\n' + e.size.toLocaleString(language) + ' bytes'}${e.modified ? '\n' + new Date(e.modified).toLocaleString(language) : ''}`).join('\n\n')); }
 function fileMenu(event) {
   const row = event.target.closest('[data-index]'); if (row) { const entry = visible[Number(row.dataset.index)]; if (!selectedFiles.has(entry.name)) { selectedFiles = new Set([entry.name]); renderFiles(); } }
-  const count = selectedFiles.size;
-  menu(event,[['openFolder',openFolder,'openFolder'],['copy',() => clipboardFiles(false),'copy','Ctrl+C',!count],['cut',() => clipboardFiles(true),'cut','Ctrl+X',!count || !folders.length],['paste',pasteFiles,'paste','Ctrl+V',!fileClipboard || !folders.length],['rename',renameFile,'rename','F2',count !== 1 || !folders.length],['remove',deleteFiles,'remove','Del',!count || !folders.length],['newFolder',newFolder,'newFolder','Ctrl+Shift+N',!folders.length],['selectAll',() => { selectedFiles = new Set(visible.map(e => e.name)); renderFiles(); },'selectAll','Ctrl+A'],['invert',() => { selectedFiles = new Set(visible.filter(e => !selectedFiles.has(e.name)).map(e => e.name)); renderFiles(); },'invert'],['properties',properties,'properties','Alt+Enter',!count]]);
+  const count = selectedFiles.size, writable = folders.length && !folders.at(-1).virtual;
+  menu(event,[['openFolder',openFolder,'openFolder'],['copy',() => clipboardFiles(false),'copy','Ctrl+C',!count],['cut',() => clipboardFiles(true),'cut','Ctrl+X',!count || !writable],['paste',pasteFiles,'paste','Ctrl+V',!fileClipboard || !writable],['rename',renameFile,'rename','F2',count !== 1 || !writable],['remove',deleteFiles,'remove','Del',!count || !writable],['newFolder',newFolder,'newFolder','Ctrl+Shift+N',!writable],['selectAll',() => { selectedFiles = new Set(visible.map(e => e.name)); renderFiles(); },'selectAll','Ctrl+A'],['invert',() => { selectedFiles = new Set(visible.filter(e => !selectedFiles.has(e.name)).map(e => e.name)); renderFiles(); },'invert'],['properties',properties,'properties','Alt+Enter',!count]]);
 }
 $('#fileList').oncontextmenu = fileMenu;
 $('#search').oninput = () => { fileAnchor = 0; renderFiles(); };
 $('#fileInput').onchange = () => run(async () => { ++folderTicket; folders = []; root = null; rootId = ''; history = []; historyAt = -1; entries = [...$('#fileInput').files].map(file => ({name:file.name,kind:'file',file,size:file.size,modified:file.lastModified})); selectedFiles.clear(); $('#search').value = ''; renderAll(); if (entries.length === 1) await openVideo(entries[0]); });
 const actions = {
-  destination:chooseDestination, showDestination:async () => { if (destination) { await navigate([destination]); status(t('exportFolderShown')); } },preferences:() => $('#preferences').showModal(),
+  destination:chooseDestination, showDestination:async () => { if (!hasDirectoryAccess) { if (downloadUrl) $('#downloadDialog').showModal(); return; } if (destination) { await navigate([destination]); status(t('exportFolderShown')); } },preferences:() => $('#preferences').showModal(),
+  downloadZip:() => { if (!downloadUrl) return; const anchor = element('a'); anchor.href = downloadUrl; anchor.download = downloadFilename; document.body.append(anchor); anchor.click(); anchor.remove(); $('#downloadDialog').close(); status(t('downloadStarted')); },
   play:() => sourceReady && (player.paused ? player.play() : player.pause()),previous:() => adjacent(-1),next:() => adjacent(1),markIn,markOut,
   undo:() => { editor.undo(); edited(); },redo:() => { editor.redo(); edited(); },zoomIn:() => changeZoom(zoom*1.5),zoomOut:() => changeZoom(zoom/1.5),fit:() => { changeZoom(1); viewport.scrollLeft = 0; },export:exportAll,cancelExport:() => exportWorker?.postMessage({type:'cancel'}),
   files:() => showPage('files'),clips:() => showPage('clips'),jobs:() => showPage('jobs'),openFolder,openFile:() => $('#fileInput').click(),
@@ -357,6 +366,7 @@ document.addEventListener('keydown', event => {
   }
   if ($('dialog[open]') || event.target.matches('input,textarea,select,[contenteditable=true]')) return;
   const ctrl = event.ctrlKey || event.metaKey, key = event.key.toLowerCase(), inFiles = page === 'files' && !!event.target.closest('#filesPage');
+  if (inFiles && folders.at(-1)?.virtual && (key === 'delete' || key === 'f2' || ctrl && ['x','v'].includes(key) || ctrl && event.shiftKey && key === 'n' || isMac && ctrl && key === 'backspace')) { event.preventDefault(); status(t('readOnlyFolder')); return; }
   let action;
   if (ctrl && key === 'z') action = event.shiftKey ? actions.redo : actions.undo;
   else if (ctrl && key === 'y') action = actions.redo;
@@ -367,6 +377,7 @@ document.addEventListener('keydown', event => {
     if (ctrl && key === 'v') action = pasteFiles;
     if (ctrl && event.shiftKey && key === 'n') action = newFolder;
     if (key === 'delete') action = deleteFiles;
+    if (isMac && event.metaKey && key === 'backspace') action = deleteFiles;
     if (key === 'f2') action = renameFile;
     if (key === 'f5') action = actions.refresh;
     if (key === 'enter' && !event.altKey && selectedFiles.size === 1) action = () => openEntry(selectedEntries()[0]);
@@ -416,5 +427,6 @@ setInterval(async () => {
   try { const current = []; for await (const [name,handle] of folder.entries()) current.push(name + ':' + handle.kind); const previous = entries.map(e => e.name + ':' + e.kind); if (ticket === folderTicket && current.sort().join('\n') !== previous.sort().join('\n')) await navigate(folders,false); } catch {}
 },5000);
 localize();
-if (!window.showDirectoryPicker || !window.Worker || !window.isSecureContext) status(t('unsupportedBrowser'));
-else { loadHandle('destination').then(async handle => { if (handle && await handle.queryPermission({mode:'readwrite'}) === 'granted') { destination = handle; $('#destinationLabel').textContent = handle.name; buttons(); } }).catch(() => {}); loadHandle('root').then(async handle => { if (handle && await handle.queryPermission({mode:'read'}) === 'granted') await navigate([handle]); }).catch(() => {}); }
+if (!window.Worker || !window.isSecureContext) status(t('unsupportedBrowser'));
+else if (hasDirectoryAccess) { loadHandle('destination').then(async handle => { if (handle && await handle.queryPermission({mode:'readwrite'}) === 'granted') { destination = handle; $('#destinationLabel').textContent = handle.name; buttons(); } }).catch(() => {}); loadHandle('root').then(async handle => { if (handle && await handle.queryPermission({mode:'read'}) === 'granted') await navigate([handle]); }).catch(() => {}); }
+keepLauncherAlive(() => !!exportWorker || busyFiles);

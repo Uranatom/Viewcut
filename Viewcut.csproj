@@ -13,6 +13,7 @@
   <ItemGroup>
     <EmbeddedResource Include="Localization.en.json" WithCulture="false" LogicalName="Viewcut.Localization.en.json" />
     <Compile Remove="tests/**/*.cs" />
+    <Compile Remove="launcher/**/*.cs" />
     <InternalsVisibleTo Include="Viewcut.Smoke" />
   </ItemGroup>
 </Project>

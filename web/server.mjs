@@ -9,6 +9,7 @@ export function serve({ port = 4173 } = {}) {
     try {
       if (!['GET','HEAD'].includes(request.method)) { response.writeHead(405); response.end(); return; }
       const url = new URL(request.url,'http://localhost');
+      if (url.pathname === '/__viewcut/runtime') { response.writeHead(204); response.end(); return; }
       const filename = path.resolve(root,'.' + decodeURIComponent(url.pathname === '/' ? '/index.html' : url.pathname));
       const relative = path.relative(root,filename);
       if (relative.startsWith('..') || path.isAbsolute(relative) || relative.split(path.sep).some(p => p.startsWith('.')) || /^(tests|node_modules)(\/|\\)/.test(relative) || relative.endsWith('.mjs') || relative.endsWith('.md') || relative === 'package.json') throw new Error('notFound');

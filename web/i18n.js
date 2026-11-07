@@ -9,5 +9,14 @@ export const strings = {
   deleteFiles:['永久删除选中的文件？浏览器删除不会移入回收站。','Permanently delete the selected files? Browser deletion does not use the recycle bin.'],newFolderName:['文件夹名称','Folder name'],renameFile:['新名称','New name'],fileExists:['目标位置已有同名项目。','An item with this name already exists.'],unsafeCopy:['不能把文件夹复制或移动到自身或其子文件夹。','A folder cannot be copied or moved into itself or its descendants.'],clipboardReady:['已复制到 Viewcut 文件剪贴板','Copied to the Viewcut file clipboard'],cutReady:['已剪切到 Viewcut 文件剪贴板','Cut to the Viewcut file clipboard'],fileOperationDone:['文件操作已完成','File operation completed'],folderAccess:['请先打开一个文件夹。','Open a folder first.'],exportFolderShown:['已在侧边栏打开保存目录。','The export folder is open in the sidebar.'],saveUnavailable:['设置暂时无法保存，请检查浏览器存储权限。','Settings could not be saved. Check browser storage permissions.'],
 };
 export let language = 'zh-CN';
+Object.assign(strings,{
+  browserDownloads:['保存到浏览器下载目录','Save to browser downloads'],
+  browserDownloadsHelp:['此浏览器通过 ZIP 下载保存片段，保存位置由浏览器设置决定。','This browser saves clips as a ZIP download. Its settings control the save location.'],
+  portableFolder:['已导入文件夹。此浏览器只读取源文件；片段将打包下载。','Folder imported. Source files are read-only; clips will download as a ZIP.'],
+  readOnlyFolder:['此浏览器无法修改源文件，请在 Finder 或资源管理器中操作。','This browser cannot modify source files. Use Finder or File Explorer.'],
+  downloadReady:['片段已准备好','Your clips are ready'],downloadHelp:['点击下载，将当前素材的所有片段保存为一个 ZIP 文件。','Download all clips from this video in one ZIP file.'],downloadZip:['下载片段 ZIP','Download clips ZIP'],downloadStarted:['已交给浏览器下载。','Download started in your browser.'],
+  unsupportedBrowser:['请使用最新版 Chrome、Edge 或 Safari 打开 Viewcut。','Open Viewcut in a current Chrome, Edge or Safari browser.'],
+  unsupportedPlayback:['此浏览器无法播放这段素材，请换用支持该编码的浏览器或桌面应用。','This browser cannot play this video. Use a browser or desktop app that supports its codec.'],
+});
 export function setLanguage(value) { language = value === 'en-US' ? value : 'zh-CN'; }
 export const t = key => strings[key]?.[language === 'en-US' ? 1 : 0] || key;

@@ -1,4 +1,4 @@
-:root{color-scheme:dark;--bg:#202020;--surface:#191919;--raised:#2d2d2d;--border:#404040;--text:#f2f2f2;--muted:#ababab;--accent:#99caff;--on-accent:#191919;--hover:#393939;--playing:#233341;--folder:#ffd15d;--sidebar:390px;--timeline:230px;--clip1:#99caff;--clip2:#94bcf6;--clip3:#dda9f0;--clip4:#f1be80;font:13px/1.45 "Segoe UI Variable Text","Segoe UI","Microsoft YaHei UI",sans-serif}
+:root{color-scheme:dark;--bg:#202020;--surface:#191919;--raised:#2d2d2d;--border:#404040;--text:#f2f2f2;--muted:#ababab;--accent:#99caff;--on-accent:#191919;--hover:#393939;--playing:#233341;--folder:#ffd15d;--sidebar:390px;--timeline:230px;--clip1:#99caff;--clip2:#94bcf6;--clip3:#dda9f0;--clip4:#f1be80;font:13px/1.45 "Segoe UI Variable Text","Segoe UI",-apple-system,BlinkMacSystemFont,"Microsoft YaHei UI",sans-serif}
 
 :root[data-theme=light]{color-scheme:light;--bg:#f3f3f3;--surface:#fff;--raised:#fafafa;--border:#d1d1d1;--text:#1a1a1a;--muted:#5d5d5d;--accent:#005fb8;--on-accent:#fff;--hover:#e5e5e5;--playing:#e5f1fb;--folder:#986b00;--clip1:#005fb8;--clip2:#593f9b;--clip3:#912b73;--clip4:#835100}
 
