@@ -1,0 +1,24 @@
+Viewcut Desktop: third-party components
+
+libmpv-2.dll
+  mpv v0.42.0-3-g902818753, supplied by shinchiro/mpv-winbuild-cmake.
+  Binary release: https://github.com/shinchiro/mpv-winbuild-cmake/releases/tag/20261106
+  Source: https://github.com/mpv-player/mpv/tree/9028187538
+  Dependency build recipes: https://github.com/shinchiro/mpv-winbuild-cmake
+  The supplied core is the default GPL build. See licenses/mpv-Copyright.txt
+  and licenses/GPL-2.0.txt, licenses/GPL-3.0.txt for component notices/terms.
+  No modifications were made to this binary by Viewcut.
+
+ffmpeg.exe / ffprobe.exe
+  Compact FFmpeg build from release/8.1, commit a35157abb96167fd7308edc92b55408d5bb084b0.
+  Source and build instructions: https://github.com/Uranatom/Viewcut/tree/main/media
+  Upstream: https://github.com/FFmpeg/FFmpeg/tree/a35157abb96167fd7308edc92b55408d5bb084b0
+  LGPL 2.1 or later. See FFmpeg-LICENSE.txt and licenses/LGPL-2.1.txt.
+  The complete configure command is published in media/Build-FFmpegLite.sh.
+
+.NET Desktop Runtime
+  Copyright .NET Foundation and contributors, MIT license and applicable
+  third-party notices. See the runtime's LICENSE.txt and THIRD-PARTY-NOTICES.txt.
+
+These notices describe bundled dependencies; they do not assign a license
+to Viewcut's own source code.

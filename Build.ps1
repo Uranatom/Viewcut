@@ -41,4 +41,10 @@ if (!(Test-Path -LiteralPath $ffmpegLicense)) { $ffmpegLicense = Join-Path $Medi
 if (Test-Path -LiteralPath $ffmpegLicense) {
     Copy-Item -LiteralPath $ffmpegLicense -Destination (Join-Path $output 'FFmpeg-LICENSE.txt') -Force
 }
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'media\THIRD-PARTY-NOTICES.txt') -Destination (Join-Path $output 'Viewcut-THIRD-PARTY-NOTICES.txt') -Force
+New-Item -ItemType Directory -Path (Join-Path $output 'licenses') -Force | Out-Null
+Copy-Item -Path (Join-Path $PSScriptRoot 'media\licenses\*.txt') -Destination (Join-Path $output 'licenses') -Force
+if (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'LICENSE')) {
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'LICENSE') -Destination (Join-Path $output 'Viewcut-LICENSE.txt') -Force
+}
 Write-Host (Join-Path $output 'Viewcut.exe')

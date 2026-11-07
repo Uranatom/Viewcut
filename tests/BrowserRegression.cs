@@ -168,7 +168,7 @@ internal static class BrowserRegression
             Assert(!Key(Keys.Control | Keys.Z), "Ctrl+Z in the address textbox is left to text editing");
             Assert(File.Exists(external), "Editing the address cannot delete selected files");
         }
-        finally { Clipboard.SetDataObject(savedClipboard, true); }
+        finally { Clipboard.SetDataObject(savedClipboard, true, 40, 100); }
 
         var dragFile = Path.Combine(folder, "拖入测试.txt");
         File.WriteAllText(dragFile, "drag-copy");
