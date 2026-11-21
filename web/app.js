@@ -160,15 +160,26 @@ $('#folderInput').onchange = () => run(async () => { const directory = importedD
 async function getFile(entry) { return entry.file || entry.handle.getFile(); }
 async function openEntry(entry) { if (entry.kind === 'directory') return navigate([...folders,entry.handle]); await openVideo(entry); }
 async function openVideo(entry) {
-  if (!isVideo(entry.name)) throw new Error('unsupportedFile');
+  const format = videoFormat(entry.name);
+  if (!format) throw new Error('unsupportedFile');
   const ticket = ++loadTicket; const file = await getFile(entry); if (ticket !== loadTicket) return;
   compatibilityPreview?.close();
   persist(); player.pause(); sourceReady = false; previewReady = false; active = { entry,file }; duration = 0;
   sourceKey = JSON.stringify([rootId, entry.file?.webkitRelativePath || entry.name, ...folders.slice(1).map(f => f.name),file.size,file.lastModified]);
   editor = editors.get(sourceKey) || new Editor(drafts[sourceKey]?.clips || []); editor.mark = null; zoom = 1; viewport.scrollLeft = 0;
-  setPlaybackSource(file);
   $('#preview').hidden = true;
   $('#empty').hidden = true; $('#mediaName').textContent = $('#activeName').textContent = file.name; document.title = `Viewcut · ${file.name}`; status(t('loading')); renderAll();
+  // On macOS WebKit, WebM can report valid metadata and then stall in native
+  // decoding. Use the compatibility preview for it before starting playback.
+  if (format.extension === 'webm' && isMac && navigator.vendor === 'Apple Computer, Inc.') {
+    player.removeAttribute('src');
+    previewVideo.removeAttribute('src');
+    player.load();
+    previewVideo.load();
+    if (url) URL.revokeObjectURL(url);
+    url = null;
+    void prepareCompatiblePlayback();
+  } else setPlaybackSource(file);
 }
 function setPlaybackSource(blob) {
   if (url) URL.revokeObjectURL(url);
