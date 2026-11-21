@@ -42,11 +42,11 @@ try {
         await page.locator('#fileInput').setInputFiles(path.join(output, 'sample.' + ext));
         try {
           await page.waitForFunction(filename => document.querySelector('#activeName').textContent === filename &&
-            !document.querySelector('[data-action=markIn]').disabled && document.querySelector('#player').readyState >= 2,
+            !document.querySelector('[data-action=markIn]').disabled && document.querySelector('#player').readyState >= 1,
             'sample.' + ext, {timeout:60000});
           for (const [time,action] of [[.6,'markIn'],[1.8,'markOut']]) {
             await page.locator('#player').evaluate((video, time) => { video.currentTime = time; }, time);
-            await page.waitForFunction(time => { const video = document.querySelector('#player'); return !video.seeking && Math.abs(video.currentTime - time) < .1; }, time);
+            await page.waitForFunction(time => { const video = document.querySelector('#player'); return video.readyState >= 2 && !video.seeking && Math.abs(video.currentTime - time) < .1; }, time);
             await page.locator(`[data-action=${action}]`).click();
           }
           await page.locator('[data-action=export]').click();

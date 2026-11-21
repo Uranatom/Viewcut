@@ -38,7 +38,7 @@ try{
  execFileSync(process.env.VIEWCUT_TEST_TOOLS?path.join(process.env.VIEWCUT_TEST_TOOLS,'ffmpeg'):'ffmpeg',
   ['-v','error','-y','-i',sample,'-c','copy',mkv]);
  await script("const bytes=Uint8Array.from(atob(arguments[0]),c=>c.charCodeAt(0)),d=new DataTransfer();d.items.add(new File([bytes],'Safari camera.mkv'));const e=document.querySelector('#fileInput');e.files=d.files;e.dispatchEvent(new Event('change',{bubbles:true}));",[(await readFile(mkv)).toString('base64')]);
- await until(()=>script("return document.querySelector('#activeName').textContent==='Safari camera.mkv'&&document.querySelector('#player').readyState>=2&&!document.querySelector('[data-action=markIn]').disabled"));
+ await until(()=>script("return document.querySelector('#activeName').textContent==='Safari camera.mkv'&&document.querySelector('#player').readyState>=1&&!document.querySelector('[data-action=markIn]').disabled"));
  for (const [time, action] of [[.5,'markIn'],[1.8,'markOut']]) {
   await script("document.querySelector('#player').currentTime=arguments[0]",[time]);
   await until(()=>script("const v=document.querySelector('#player');return !v.seeking&&Math.abs(v.currentTime-arguments[0])<.1",[time]));

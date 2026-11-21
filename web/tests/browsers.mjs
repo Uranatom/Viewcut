@@ -46,7 +46,8 @@ try {
       await page.locator('.file-row').filter({hasText:'Camera sunset.mp4'}).click();
       assert.equal(await page.locator('#activeName').textContent(),'Dropped video.mp4','single click does not replace the loaded video');
       await page.locator('.file-row').filter({hasText:'Camera sunset.mp4'}).dblclick();
-      await page.waitForFunction(() => !document.querySelector('[data-action=markIn]').disabled);
+      await page.waitForFunction(() => document.querySelector('#activeName').textContent === 'Camera sunset.mp4' &&
+        !document.querySelector('[data-action=markIn]').disabled && document.querySelector('#player').readyState >= 1);
       async function seek(time) { await page.locator('#player').evaluate((e,time) => { e.currentTime = time; },time); await page.waitForFunction(time => Math.abs(document.querySelector('#player').currentTime-time) < .1,time); }
       for (const [start,end] of [[1,3],[4.4,6.8]]) { await seek(start); await page.locator('[data-action=markIn]').click(); await seek(end); await page.locator('[data-action=markOut]').click(); }
       assert.equal(await page.locator('.segment').count(),2);

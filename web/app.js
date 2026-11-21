@@ -166,14 +166,15 @@ async function openVideo(entry) {
   persist(); player.pause(); sourceReady = false; previewReady = false; active = { entry,file }; duration = 0;
   sourceKey = JSON.stringify([rootId, entry.file?.webkitRelativePath || entry.name, ...folders.slice(1).map(f => f.name),file.size,file.lastModified]);
   editor = editors.get(sourceKey) || new Editor(drafts[sourceKey]?.clips || []); editor.mark = null; zoom = 1; viewport.scrollLeft = 0;
-  setPlaybackSource(file.slice(0, file.size, videoFormat(file.name).mime));
+  setPlaybackSource(file);
   $('#preview').hidden = true;
   $('#empty').hidden = true; $('#mediaName').textContent = $('#activeName').textContent = file.name; document.title = `Viewcut · ${file.name}`; status(t('loading')); renderAll();
 }
 function setPlaybackSource(blob) {
   if (url) URL.revokeObjectURL(url);
   url = URL.createObjectURL(blob);
-  player.src = previewVideo.src = url;
+  player.src = url;
+  previewVideo.src = url;
   previewTarget = null; previewBusy = false; previewPrimed = previewPriming = false;
 }
 async function prepareCompatiblePlayback() {

@@ -41,8 +41,11 @@ jobs:
           node --test web/tests/model.test.mjs web/tests/media.test.mjs web/tests/portable.test.mjs
           node web/tests/safari.mjs
           node web/tests/browsers.mjs
-          node web/tests/formats.mjs
+      - name: New video containers across Chrome, Edge and WebKit
+        if: ${{ !cancelled() }}
+        run: node web/tests/formats.mjs
       - name: Native launcher
+        if: ${{ !cancelled() }}
         run: |
           dotnet publish launcher/Viewcut.Web.csproj -c Release -r ${{ matrix.rid }} -p:PublishAot=true -o artifacts/WebLauncher/${{ matrix.rid }}
           node launcher/mac-tests.mjs
