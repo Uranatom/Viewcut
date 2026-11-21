@@ -11,10 +11,10 @@ printf '%s\n' '8.1.3-34-ga35157abb9-viewcut' > VERSION
 ./configure --prefix="$prefix" --target-os=mingw32 --arch=x86_64 --cc=gcc \
   --disable-everything --disable-autodetect --disable-network --disable-doc --disable-debug \
   --disable-x86asm --disable-ffplay --enable-ffmpeg --enable-ffprobe --enable-protocol=file \
-  --enable-demuxer=mov --enable-muxer=mp4,mov \
-  --enable-parser=h264,hevc,aac,ac3,mpegaudio,mpeg4video \
+  --enable-demuxer=mov,matroska,avi,mpegts --enable-muxer=mp4,mov,matroska,webm,avi,mpegts \
+  --enable-parser=h264,hevc,aac,ac3,mpegaudio,mpeg4video,mpegvideo,vp8,vp9,av1,opus,vorbis \
   --enable-bsf=aac_adtstoasc,extract_extradata,h264_mp4toannexb,hevc_mp4toannexb \
-  --enable-decoder=h264,hevc,aac,pcm_s16le,pcm_s24le,pcm_s32le,mp3,ac3,eac3,opus \
+  --enable-decoder=h264,hevc,aac,pcm_s16le,pcm_s24le,pcm_s32le,mp2,mp3,ac3,eac3,opus,mpeg4,mpeg2video,vp8,vp9,av1,vorbis \
   --extra-ldflags=-static
 "${MAKE:-gmake}" -j"${JOBS:-8}"
 "${MAKE:-gmake}" install

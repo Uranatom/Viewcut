@@ -12,6 +12,10 @@ const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));async function until
 let browser;
 try{
  const launch=await until(async()=> (await readFile(ready,'utf8')).split('\n'));
+ const wasm=await fetch(launch[0]+'/ffmpeg-core.wasm',{method:'HEAD'});
+ assert.equal(wasm.status,200);
+ assert.equal(wasm.headers.get('content-type'),'application/wasm');
+ assert.ok(Number(wasm.headers.get('content-length'))>30_000_000);
  browser=await pw.webkit.launch();const page=await browser.newPage();await page.goto(launch[0]);await page.locator('[data-action=openFolder]').waitFor();
  await wait(4100);assert.equal(child.exitCode,null);
  const repeated=path.join(output,'repeat.txt');execFileSync(binary,['--browser','none','--port','14873','--ready-file',repeated]);assert.ok((await readFile(repeated,'utf8')).endsWith('reused'));

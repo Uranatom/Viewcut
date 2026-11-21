@@ -67,6 +67,27 @@ var hevcOutput = await exporter.ExportAsync(hevc, CancellationToken.None);
 await Run(ffmpeg, "-v", "error", "-xerror", "-i", hevcOutput, "-f", "null", "-");
 Assert(Path.GetExtension(hevcOutput) == ".mov", "Silent HEVC MOV can be cut and decoded");
 
+string? mkvOutput = null;
+foreach (var (ext, codec, muxer) in new[]
+{
+    ("m4v", "libx264", "mp4"), ("MKV", "libx264", "matroska"), ("webm", "libvpx-vp9", "webm"),
+    ("avi", "mpeg4", "avi"), ("ts", "libx264", "mpegts"), ("m2ts", "libx264", "mpegts")
+})
+{
+    var sample = Path.Combine(directory, $"相机样片.{ext}");
+    var arguments = new List<string> { "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=160x90:rate=24",
+        "-t", "3", "-an", "-c:v", codec, "-g", "24", "-f", muxer };
+    if (ext == "m2ts") arguments.AddRange(["-mpegts_m2ts_mode", "1"]);
+    arguments.Add(sample);
+    await Run(ffmpeg, arguments.ToArray());
+    Assert(VideoFormats.Supports(sample), $"{ext} is recognized for import");
+    var exported = await exporter.ExportAsync(new ExportJob(sample, SourceStamp.Read(sample), output, .6, 1.8), CancellationToken.None);
+    Assert(Path.GetExtension(exported) == "." + ext.ToLowerInvariant(), $"{ext} retains its container");
+    await Run(ffmpeg, "-v", "error", "-xerror", "-i", exported, "-f", "null", "-");
+    if (ext == "MKV") mkvOutput = exported;
+    File.Delete(sample);
+}
+
 try
 {
     await exporter.ExportAsync(fast with { Stamp = stamp with { Size = 1 } }, CancellationToken.None);
@@ -170,6 +191,8 @@ var thread = new Thread(() =>
                 await WaitForUi(() => app.Text.Contains(Path.GetFileName(file)) && typeof(MainWindow).GetField("player", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(app) is Player p && p.Ready);
             }
             await DropVideo(second);
+            await DropVideo(mkvOutput!);
+            Console.WriteLine("PASS: Dropped MKV loads in the embedded player");
             await DropVideo(source);
             Assert(SourceStamp.Read(source) == stamp, "Dropping a video loads it and preserves the original file");
             Assert(!controls.OfType<Button>().Any(button => button.Text is "打开视频" or "打开文件夹" or "X  跳过")

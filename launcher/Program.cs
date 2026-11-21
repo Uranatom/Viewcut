@@ -9,7 +9,7 @@ namespace Viewcut.Web;
 
 internal static class Program
 {
-    internal const string Version = "0.6.1";
+    internal const string Version = "0.6.2";
     internal const string Identity = "Viewcut-Web-Launcher/1";
     private static async Task<int> Main(string[] args)
     {
@@ -167,6 +167,7 @@ internal sealed class LocalHost : IDisposable
         var assembly = Assembly.GetExecutingAssembly();
         foreach (var name in assembly.GetManifestResourceNames().Where(n => n.StartsWith("web.", StringComparison.Ordinal)))
         {
+            if (name == "web.ffmpeg-core.wasm") continue;
             using var source = assembly.GetManifestResourceStream(name)!; using var output = new MemoryStream(); source.CopyTo(output);
             var file = name[4..];
             assets["/" + file] = (output.ToArray(), Path.GetExtension(file) switch { ".html" => "text/html; charset=utf-8", ".js" => "text/javascript; charset=utf-8", ".css" => "text/css; charset=utf-8", ".svg" => "image/svg+xml", ".txt" => "text/plain; charset=utf-8", _ => "application/octet-stream" });
@@ -231,6 +232,13 @@ internal sealed class LocalHost : IDisposable
                     await Response(stream, 204, "", "text/plain", timeout.Token); return;
                 }
                 if (path == "/") path = "/index.html";
+                if (path == "/ffmpeg-core.wasm")
+                {
+                    using var wasm = Assembly.GetExecutingAssembly().GetManifestResourceStream("web.ffmpeg-core.wasm")!;
+                    await WriteHeaders(stream, 200, wasm.Length, "application/wasm", timeout.Token);
+                    if (request[0] != "HEAD") await wasm.CopyToAsync(stream, timeout.Token);
+                    return;
+                }
                 if (!assets.TryGetValue(path, out var asset)) { await Response(stream, 404, "Not found", "text/plain", timeout.Token); return; }
                 await Response(stream, 200, asset.Data, asset.Type, timeout.Token, request[0] == "HEAD");
             }
@@ -241,10 +249,14 @@ internal sealed class LocalHost : IDisposable
     private static Task Response(NetworkStream stream, int status, string body, string type, CancellationToken token) => Response(stream, status, Encoding.UTF8.GetBytes(body), type, token);
     private static async Task Response(NetworkStream stream, int status, byte[] body, string type, CancellationToken token, bool head = false)
     {
-        const string csp = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; media-src 'self' blob:; connect-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'";
-        var header = $"HTTP/1.1 {status} OK\r\nContent-Type: {type}\r\nContent-Length: {body.Length}\r\nConnection: close\r\nCache-Control: no-cache\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: no-referrer\r\nContent-Security-Policy: {csp}\r\n\r\n";
-        await stream.WriteAsync(Encoding.ASCII.GetBytes(header), token);
+        await WriteHeaders(stream, status, body.Length, type, token);
         if (!head && body.Length > 0) await stream.WriteAsync(body, token);
+    }
+    private static ValueTask WriteHeaders(NetworkStream stream, int status, long length, string type, CancellationToken token)
+    {
+        const string csp = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; media-src 'self' blob:; connect-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'";
+        var header = $"HTTP/1.1 {status} OK\r\nContent-Type: {type}\r\nContent-Length: {length}\r\nConnection: close\r\nCache-Control: no-cache\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: no-referrer\r\nContent-Security-Policy: {csp}\r\n\r\n";
+        return stream.WriteAsync(Encoding.ASCII.GetBytes(header), token);
     }
     public void Dispose() { stop.Cancel(); listener.Stop(); stop.Dispose(); }
 }

@@ -5,7 +5,7 @@ English · [简体中文](README.md)
 License: [GNU GPL v3.0](LICENSE) (`GPL-3.0-only`). Third-party components retain their own licenses; see [dependency notices](media/THIRD-PARTY-NOTICES.txt).
 
 Viewcut is a lightweight video player and rough-cut tool targeting Windows 10 22H2 and Windows 11 x64. Windows 10 machine acceptance is pending; see [compatibility notes](docs/windows-compatibility.md). Review
-camera or drone MP4/MOV footage, mark the parts worth keeping, and export all selected
+camera, drone or local video footage, mark the parts worth keeping, and export all selected
 clips from a video in one batch.
 
 ## Latest downloads
@@ -22,7 +22,8 @@ clips from a video in one batch.
 ## Desktop Quick Start
 
 1. Download and run the Windows installer. Choose the install folder and optional desktop shortcut, then open Viewcut.
-2. **Drop an MP4 / MOV directly onto the player**, or double-click a video in the sidebar.
+2. **Drop a video directly onto the player**, or double-click a video in the sidebar.
+   Supported containers are MP4, MOV, M4V, MKV, WebM, AVI, TS and M2TS. Cuts retain the source container.
 3. Press Space to play/pause, **I** to mark in and **O** to mark out. Repeat to select several clips. Marking out does not export automatically.
 4. Choose an export folder, then click the timeline's **export icon** to export every clip from the current video. Hover over icons for their names and shortcuts.
 

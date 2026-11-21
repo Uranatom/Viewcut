@@ -56,8 +56,8 @@ icns = b"icns" + struct.pack(">I", len(png) + 16) + icon_type + struct.pack(">I"
 plist = plistlib.dumps({
     "CFBundleIdentifier": "app.viewcut.web", "CFBundleName": "Viewcut Web",
     "CFBundleDisplayName": "Viewcut Web", "CFBundleExecutable": "Viewcut",
-    "CFBundlePackageType": "APPL", "CFBundleVersion": "0.6.1",
-    "CFBundleShortVersionString": "0.6.1", "CFBundleIconFile": "Viewcut.icns",
+    "CFBundlePackageType": "APPL", "CFBundleVersion": "0.6.2",
+    "CFBundleShortVersionString": "0.6.2", "CFBundleIconFile": "Viewcut.icns",
     "LSMinimumSystemVersion": "15.0", "LSUIElement": True,
     "LSArchitecturePriority": ["arm64" if args.rid.endswith("arm64") else "x86_64"],
 })
@@ -71,7 +71,7 @@ files = {
     "Viewcut Web.app/Contents/Resources/LICENSE.txt": ((repo / "LICENSE").read_bytes(), 0o644),
     "Viewcut Web.app/Contents/Resources/COPYRIGHT.txt": ((repo / "COPYRIGHT").read_bytes(), 0o644),
 }
-archive = output / f"Viewcut-Web-0.6.1-{args.rid}.zip"
+archive = output / f"Viewcut-Web-0.6.2-{args.rid}.zip"
 with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as bundle:
     for name, (data, mode) in files.items():
         info = zipfile.ZipInfo(name)

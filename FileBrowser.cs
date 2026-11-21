@@ -5,7 +5,7 @@ namespace Viewcut;
 
 internal sealed record BrowserEntry(string Path, string Name, bool Directory, long Size, DateTime Modified)
 {
-    public bool Video => !Directory && System.IO.Path.GetExtension(Path).ToLowerInvariant() is ".mp4" or ".mov";
+    public bool Video => !Directory && VideoFormats.Supports(Path);
 }
 
 internal sealed partial class FileBrowser : UserControl

@@ -1,4 +1,4 @@
-# Viewcut Web 0.6.1
+# Viewcut Web 0.6.2
 
 Viewcut 采用 GNU GPL v3.0（SPDX：GPL-3.0-only）。完整条款见随包提供的 LICENSE.txt 或仓库 LICENSE；第三方组件保留其各自许可证。
 
@@ -16,6 +16,8 @@ Chrome / Edge 支持授权目录直接导出。Safari 使用文件夹导入和 Z
 当前 Mac 包为开发测试包，未使用 Apple Developer ID 签名与公证。首次打开可能被 Gatekeeper 拦截；请仅在确认来源后按 macOS“隐私与安全性”的提示允许打开。面向普通用户发布前应完成 Developer ID 签名、公证与实际 Safari 验收；不要通过关闭 Gatekeeper 解决。
 
 ## 开发构建
+
+准备 Node.js 22 或更新版本，在仓库根目录运行 `node web/prepare-media.mjs`，再构建任一架构的启动器。
 
 Windows 安装 .NET 10 SDK 和 Visual Studio C++ Build Tools 后：
 

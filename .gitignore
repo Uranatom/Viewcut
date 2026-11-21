@@ -3,3 +3,6 @@ artifacts/
 bin/
 obj/
 web/node_modules/
+web/ffmpeg-core.js
+web/ffmpeg-core.wasm
+web/ffmpeg-core-LICENSE.txt

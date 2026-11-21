@@ -33,7 +33,20 @@ try{
  await until(()=>script("const c=document.querySelector('#preview canvas');return !document.querySelector('#preview').hidden&&Math.abs(Number(c.dataset.frameTime)-2.4)<.15"));
  const image=await request('GET',`/session/${session}/screenshot`);await writeFile(path.join(output,'Safari-preview.png'),Buffer.from(image,'base64'));
  await click('export');await until(()=>script("return document.querySelector('#downloadDialog').open"));
- await writeFile(path.join(output,'results.json'),JSON.stringify({browser:'Safari',capabilities:created.capabilities,status:'passed',tests:['H264 File playback','multiple clip marking','real frame preview','Worker remux and ZIP preparation'],nativePicker:'not automated',downloadSaveDialog:'not automated'},null,2));
- console.log('PASS real macOS Safari: H264 playback, multiple clips, frame preview, ZIP preparation');
+ await script("document.querySelector('#downloadDialog').close()");
+ const mkv=path.join(output,'Safari camera.mkv');
+ execFileSync(process.env.VIEWCUT_TEST_TOOLS?path.join(process.env.VIEWCUT_TEST_TOOLS,'ffmpeg'):'ffmpeg',
+  ['-v','error','-y','-i',sample,'-c','copy',mkv]);
+ await script("const bytes=Uint8Array.from(atob(arguments[0]),c=>c.charCodeAt(0)),d=new DataTransfer();d.items.add(new File([bytes],'Safari camera.mkv'));const e=document.querySelector('#fileInput');e.files=d.files;e.dispatchEvent(new Event('change',{bubbles:true}));",[(await readFile(mkv)).toString('base64')]);
+ await until(()=>script("return document.querySelector('#activeName').textContent==='Safari camera.mkv'&&document.querySelector('#player').readyState>=2&&!document.querySelector('[data-action=markIn]').disabled"));
+ for (const [time, action] of [[.5,'markIn'],[1.8,'markOut']]) {
+  await script("document.querySelector('#player').currentTime=arguments[0]",[time]);
+  await until(()=>script("const v=document.querySelector('#player');return !v.seeking&&Math.abs(v.currentTime-arguments[0])<.1",[time]));
+  await click(action);
+ }
+ await click('export');
+ await until(()=>script("return document.querySelector('#downloadDialog').open&&document.querySelector('.job-card.done strong')?.textContent==='Safari camera_001.mkv'"));
+ await writeFile(path.join(output,'results.json'),JSON.stringify({browser:'Safari',capabilities:created.capabilities,status:'passed',tests:['H264 File playback','multiple clip marking','real frame preview','Worker remux and ZIP preparation','MKV playback and original-format export'],nativePicker:'not automated',downloadSaveDialog:'not automated'},null,2));
+ console.log('PASS real macOS Safari: MP4 and MKV playback, multiple clips, frame preview, original-format ZIP preparation');
 }catch(error){let state;try{state=await script("const v=document.querySelector('#player');return {time:v.currentTime,duration:v.duration,ready:v.readyState,paused:v.paused,error:v.error?.code,status:document.querySelector('#status').textContent,markHidden:document.querySelector('#markLine').hidden,markDisabled:document.querySelector('[data-action=markIn]').disabled}");console.log('Safari state',state);}catch{}await writeFile(path.join(output,'results.json'),JSON.stringify({browser:'Safari',status:'failed',error:error.message,state},null,2));throw error;}
 finally{if(session)await request('DELETE',`/session/${session}`).catch(()=>{});driver.kill();server.close();}

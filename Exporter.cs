@@ -19,8 +19,8 @@ internal sealed class Exporter(string toolsDirectory)
             throw new DirectoryNotFoundException(L.F("无法访问目标目录：{0}", job.Folder));
 
         var extension = Path.GetExtension(job.Source).ToLowerInvariant();
-        if (extension is not (".mp4" or ".mov"))
-            throw new InvalidDataException(L.T("首版支持导出 MP4 和 MOV。"));
+        var muxer = VideoFormats.Muxer(job.Source)
+            ?? throw new InvalidDataException(L.T("不支持此视频格式。"));
         if (job.Name is { } customName)
         {
             if (ClipNames.Validate(customName, job.Id, [], null, extension) is { } error)
@@ -36,7 +36,8 @@ internal sealed class Exporter(string toolsDirectory)
             "-ss", Seconds(job.Start), "-i", job.Source, "-t", Seconds(job.End - job.Start),
             "-map", "0:V:0", "-map", "0:a?", "-map_chapters", "-1"
         };
-        arguments.AddRange(["-c", "copy", "-avoid_negative_ts", "make_zero"]);
+        arguments.AddRange(["-c", "copy", "-avoid_negative_ts", "make_zero", "-f", muxer]);
+        if (extension == ".m2ts") arguments.AddRange(["-mpegts_m2ts_mode", "1"]);
         arguments.Add(staging);
 
         try

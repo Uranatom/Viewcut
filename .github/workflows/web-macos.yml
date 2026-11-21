@@ -28,6 +28,7 @@ jobs:
           node-version: '24'
       - name: Prepare browser and fixtures
         run: |
+          node web/prepare-media.mjs
           command -v ffmpeg || brew install ffmpeg
           echo "VIEWCUT_TEST_TOOLS=$(dirname "$(command -v ffmpeg)")" >> "$GITHUB_ENV"
           echo "VIEWCUT_PLAYWRIGHT=$GITHUB_WORKSPACE/web/node_modules/playwright/index.mjs" >> "$GITHUB_ENV"
@@ -40,6 +41,7 @@ jobs:
           node --test web/tests/model.test.mjs web/tests/media.test.mjs web/tests/portable.test.mjs
           node web/tests/safari.mjs
           node web/tests/browsers.mjs
+          node web/tests/formats.mjs
       - name: Native launcher
         run: |
           dotnet publish launcher/Viewcut.Web.csproj -c Release -r ${{ matrix.rid }} -p:PublishAot=true -o artifacts/WebLauncher/${{ matrix.rid }}

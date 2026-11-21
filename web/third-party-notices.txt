@@ -1,4 +1,11 @@
-Viewcut Web launcher third-party notices
+Viewcut Web third-party notices
+
+FFmpeg WebAssembly (@ffmpeg/core 0.12.10, single-threaded, unmodified)
+License: GPL-2.0-or-later (see ffmpeg-core-LICENSE.txt).
+Corresponding upstream source and build recipes: https://github.com/ffmpegwasm/ffmpeg.wasm/tree/v0.12.10
+The upstream Dockerfile identifies the versions of FFmpeg, codecs and Emscripten.
+Binary provenance: https://registry.npmjs.org/@ffmpeg/core/-/core-0.12.10.tgz
+Viewcut build preparation and the pinned archive checksum are in web/prepare-media.mjs.
 .NET runtime and Native AOT components:
 The MIT License (MIT)
 

@@ -5,6 +5,8 @@ import { saveHandle, loadHandle, permission } from './storage.js';
 import { additive,hasDirectoryAccess,isMac,shortcut } from './platform.js';
 import { importedDirectory } from './portable.js';
 import { keepLauncherAlive } from './host.js';
+import { videoFormat, videoAccept } from './formats.js';
+import { mediaSession } from './compat-media.js';
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
 const player = $('#player'), previewVideo = $('#previewVideo'), viewport = $('#timelineViewport'), track = $('#track');
@@ -16,6 +18,8 @@ let history = [], historyAt = -1, fileClipboard = null, busyFiles = false, expor
 let rootId = '', knownRoots, browsing = 0;
 let downloadUrl = null, downloadFilename = '';
 let previewPrimed = false, previewPriming = false;
+let compatibilityPreview;
+$('#fileInput').accept = videoAccept;
 async function rootIdentity(handle) {
   if (handle.virtual) return 'import:' + handle.name;
   knownRoots ??= await loadHandle('knownRoots').catch(() => []) || [];
@@ -126,7 +130,7 @@ function renderFiles() {
   });
   $('#fileFooter').textContent = `${visible.length} ${t('items')}${selectedFiles.size ? ` · ${t('selected')} ${selectedFiles.size}` : ''}`;
 }
-const isVideo = name => /\.(mp4|mov|m4v)$/i.test(name);
+const isVideo = name => videoFormat(name) !== null;
 const videoEntries = () => entries.filter(e => e.kind !== 'directory' && isVideo(e.name));
 async function navigate(nextFolders, remember = true) {
   const ticket = ++folderTicket; const handle = nextFolders.at(-1); if (!handle) return;
@@ -158,12 +162,37 @@ async function openEntry(entry) { if (entry.kind === 'directory') return navigat
 async function openVideo(entry) {
   if (!isVideo(entry.name)) throw new Error('unsupportedFile');
   const ticket = ++loadTicket; const file = await getFile(entry); if (ticket !== loadTicket) return;
+  compatibilityPreview?.close();
   persist(); player.pause(); sourceReady = false; previewReady = false; active = { entry,file }; duration = 0;
   sourceKey = JSON.stringify([rootId, entry.file?.webkitRelativePath || entry.name, ...folders.slice(1).map(f => f.name),file.size,file.lastModified]);
   editor = editors.get(sourceKey) || new Editor(drafts[sourceKey]?.clips || []); editor.mark = null; zoom = 1; viewport.scrollLeft = 0;
-  if (url) URL.revokeObjectURL(url); url = URL.createObjectURL(file); player.src = url; previewVideo.src = url; previewTarget = null; previewBusy = false; previewPrimed = previewPriming = false;
+  setPlaybackSource(file.slice(0, file.size, videoFormat(file.name).mime));
   $('#preview').hidden = true;
   $('#empty').hidden = true; $('#mediaName').textContent = $('#activeName').textContent = file.name; document.title = `Viewcut · ${file.name}`; status(t('loading')); renderAll();
+}
+function setPlaybackSource(blob) {
+  if (url) URL.revokeObjectURL(url);
+  url = URL.createObjectURL(blob);
+  player.src = previewVideo.src = url;
+  previewTarget = null; previewBusy = false; previewPrimed = previewPriming = false;
+}
+async function prepareCompatiblePlayback() {
+  sourceReady = previewReady = false; buttons();
+  const source = active;
+  if (!source || source.compatibilityAttempted) { status(t('unsupportedPlayback')); return; }
+  source.compatibilityAttempted = true;
+  status(t('preparingPreview'));
+  const session = compatibilityPreview = mediaSession(source.file);
+  try {
+    await session.ready;
+    const blob = await session.request({preview:true});
+    if (source === active) setPlaybackSource(blob);
+  } catch (error) {
+    if (source === active && error.name !== 'AbortError') report(error);
+  } finally {
+    session.close();
+    if (compatibilityPreview === session) compatibilityPreview = null;
+  }
 }
 function changedSource() { return active?.entry.handle?.getFile().then(file => { if (file.size !== active.file.size || file.lastModified !== active.file.lastModified) throw new Error('sourceChanged'); }) || Promise.resolve(); }
 function adjacent(direction) { const videos = videoEntries(), index = videos.findIndex(isActive); if (videos.length) return openVideo(videos[(index + direction + videos.length) % videos.length]); }
@@ -268,8 +297,8 @@ function pumpPreview() {
 previewVideo.onloadedmetadata = () => { previewReady = true; pumpPreview(); };
 previewVideo.onseeked = () => { previewBusy = false; paintPreview(); if (previewVideo.requestVideoFrameCallback && previewVideo.readyState >= 2) previewVideo.requestVideoFrameCallback(() => paintPreview()); pumpPreview(); };
 previewVideo.onloadeddata = previewVideo.oncanplay = () => { paintPreview(); pumpPreview(); };
-player.onloadedmetadata = () => { duration = player.duration; if (!Number.isFinite(duration) || duration <= 0) { report(new Error('unsupportedPlayback')); return; } sourceReady = true; renderTimeline(); buttons(); status(t('ready')); };
-player.onerror = () => { sourceReady = false; status(t('unsupportedPlayback')); buttons(); };
+player.onloadedmetadata = () => { duration = player.duration; if (!Number.isFinite(duration) || duration <= 0 || !player.videoWidth) { void prepareCompatiblePlayback(); return; } sourceReady = true; renderTimeline(); buttons(); status(t('ready')); };
+player.onerror = () => { void prepareCompatiblePlayback(); };
 player.ontimeupdate = clock;
 let frameLoop = 0;
 player.onplay = () => { buttons(); const update = () => { clock(); if (!player.paused) frameLoop = requestAnimationFrame(update); }; cancelAnimationFrame(frameLoop); update(); };

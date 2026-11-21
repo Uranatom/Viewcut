@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([string]$Version = '0.6.1')
+param([string]$Version = '0.6.2')
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 $release = Join-Path $repo 'artifacts\Release'
@@ -15,8 +15,9 @@ foreach ($item in $sources.GetEnumerator()) {
     if (!(Test-Path -LiteralPath $source)) { throw "Missing $source" }
     Copy-Item -LiteralPath $source -Destination (Join-Path $release $item.Key) -Force
 }
+if (!(Test-Path -LiteralPath (Join-Path $repo 'web\ffmpeg-core.wasm'))) { throw 'Run node web/prepare-media.mjs before packaging.' }
 $static = Get-ChildItem -LiteralPath (Join-Path $repo 'web') -File |
-    Where-Object { $_.Extension -in '.html', '.js', '.css', '.svg', '.txt' }
+    Where-Object { $_.Extension -in '.html', '.js', '.css', '.svg', '.txt', '.wasm' }
 Compress-Archive -LiteralPath ($static.FullName + @((Join-Path $repo 'LICENSE'), (Join-Path $repo 'COPYRIGHT'))) -DestinationPath (Join-Path $release 'Viewcut-Web-Static.zip') -Force
 Copy-Item -LiteralPath (Join-Path $repo 'LICENSE') -Destination (Join-Path $release 'LICENSE.txt') -Force
 Copy-Item -LiteralPath (Join-Path $repo 'COPYRIGHT') -Destination (Join-Path $release 'COPYRIGHT.txt') -Force

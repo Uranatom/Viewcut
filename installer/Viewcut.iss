@@ -1,4 +1,4 @@
-﻿#ifndef AppVersion
+#ifndef AppVersion
   #error Define AppVersion when compiling.
 #endif
 #ifndef Payload
@@ -9,9 +9,8 @@
 #endif
 
 #define FileVerbRoot "Software\Classes\SystemFileAssociations\"
+#define FileVerb(str Ext) FileVerbRoot + "." + Ext + "\shell\Viewcut.Setup.CullFile"
 #define FolderVerb "Software\Classes\Directory\shell\Viewcut.Setup.CullFolder"
-#define Mp4Verb FileVerbRoot + ".mp4\shell\Viewcut.Setup.CullFile"
-#define MovVerb FileVerbRoot + ".mov\shell\Viewcut.Setup.CullFile"
 #define InstallId "{D81B38D5-2C39-414B-91F0-8EA6C13FD2BF}"
 
 [Setup]
@@ -74,12 +73,30 @@ Name: "{group}\{cm:RemoveViewcut}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\Viewcut"; Filename: "{app}\Viewcut.exe"; WorkingDir: "{app}"; IconFilename: "{app}\Viewcut.exe"; Tasks: desktopicon
 
 [Registry]
-Root: HKCU; Subkey: "{#Mp4Verb}"; ValueType: string; ValueData: "{cm:OpenInViewcut}"; Flags: uninsdeletekey; Tasks: explorermenu
-Root: HKCU; Subkey: "{#Mp4Verb}"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\Viewcut.exe"",0"; Tasks: explorermenu
-Root: HKCU; Subkey: "{#Mp4Verb}\command"; ValueType: string; ValueData: """{app}\Viewcut.exe"" --file ""%1"""; Tasks: explorermenu
-Root: HKCU; Subkey: "{#MovVerb}"; ValueType: string; ValueData: "{cm:OpenInViewcut}"; Flags: uninsdeletekey; Tasks: explorermenu
-Root: HKCU; Subkey: "{#MovVerb}"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\Viewcut.exe"",0"; Tasks: explorermenu
-Root: HKCU; Subkey: "{#MovVerb}\command"; ValueType: string; ValueData: """{app}\Viewcut.exe"" --file ""%1"""; Tasks: explorermenu
+Root: HKCU; Subkey: "{#FileVerb("mp4")}"; ValueType: string; ValueData: "{cm:OpenInViewcut}"; Flags: uninsdeletekey; Tasks: explorermenu
+Root: HKCU; Subkey: "{#FileVerb("mp4")}"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\Viewcut.exe"",0"; Tasks: explorermenu
+Root: HKCU; Subkey: "{#FileVerb("mp4")}\command"; ValueType: string; ValueData: """{app}\Viewcut.exe"" --file ""%1"""; Tasks: explorermenu
+Root: HKCU; Subkey: "{#FileVerb("mov")}"; ValueType: string; ValueData: "{cm:OpenInViewcut}"; Flags: uninsdeletekey; Tasks: explorermenu
+Root: HKCU; Subkey: "{#FileVerb("mov")}"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\Viewcut.exe"",0"; Tasks: explorermenu
+Root: HKCU; Subkey: "{#FileVerb("mov")}\command"; ValueType: string; ValueData: """{app}\Viewcut.exe"" --file ""%1"""; Tasks: explorermenu
+Root: HKCU; Subkey: "{#FileVerb("m4v")}"; ValueType: string; ValueData: "{cm:OpenInViewcut}"; Flags: uninsdeletekey; Tasks: explorermenu
+Root: HKCU; Subkey: "{#FileVerb("m4v")}"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\Viewcut.exe"",0"; Tasks: explorermenu
+Root: HKCU; Subkey: "{#FileVerb("m4v")}\command"; ValueType: string; ValueData: """{app}\Viewcut.exe"" --file ""%1"""; Tasks: explorermenu
+Root: HKCU; Subkey: "{#FileVerb("mkv")}"; ValueType: string; ValueData: "{cm:OpenInViewcut}"; Flags: uninsdeletekey; Tasks: explorermenu
+Root: HKCU; Subkey: "{#FileVerb("mkv")}"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\Viewcut.exe"",0"; Tasks: explorermenu
+Root: HKCU; Subkey: "{#FileVerb("mkv")}\command"; ValueType: string; ValueData: """{app}\Viewcut.exe"" --file ""%1"""; Tasks: explorermenu
+Root: HKCU; Subkey: "{#FileVerb("webm")}"; ValueType: string; ValueData: "{cm:OpenInViewcut}"; Flags: uninsdeletekey; Tasks: explorermenu
+Root: HKCU; Subkey: "{#FileVerb("webm")}"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\Viewcut.exe"",0"; Tasks: explorermenu
+Root: HKCU; Subkey: "{#FileVerb("webm")}\command"; ValueType: string; ValueData: """{app}\Viewcut.exe"" --file ""%1"""; Tasks: explorermenu
+Root: HKCU; Subkey: "{#FileVerb("avi")}"; ValueType: string; ValueData: "{cm:OpenInViewcut}"; Flags: uninsdeletekey; Tasks: explorermenu
+Root: HKCU; Subkey: "{#FileVerb("avi")}"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\Viewcut.exe"",0"; Tasks: explorermenu
+Root: HKCU; Subkey: "{#FileVerb("avi")}\command"; ValueType: string; ValueData: """{app}\Viewcut.exe"" --file ""%1"""; Tasks: explorermenu
+Root: HKCU; Subkey: "{#FileVerb("ts")}"; ValueType: string; ValueData: "{cm:OpenInViewcut}"; Flags: uninsdeletekey; Tasks: explorermenu
+Root: HKCU; Subkey: "{#FileVerb("ts")}"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\Viewcut.exe"",0"; Tasks: explorermenu
+Root: HKCU; Subkey: "{#FileVerb("ts")}\command"; ValueType: string; ValueData: """{app}\Viewcut.exe"" --file ""%1"""; Tasks: explorermenu
+Root: HKCU; Subkey: "{#FileVerb("m2ts")}"; ValueType: string; ValueData: "{cm:OpenInViewcut}"; Flags: uninsdeletekey; Tasks: explorermenu
+Root: HKCU; Subkey: "{#FileVerb("m2ts")}"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\Viewcut.exe"",0"; Tasks: explorermenu
+Root: HKCU; Subkey: "{#FileVerb("m2ts")}\command"; ValueType: string; ValueData: """{app}\Viewcut.exe"" --file ""%1"""; Tasks: explorermenu
 Root: HKCU; Subkey: "{#FolderVerb}"; ValueType: string; ValueData: "{cm:OpenFolder}"; Flags: uninsdeletekey; Tasks: explorermenu
 Root: HKCU; Subkey: "{#FolderVerb}"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\Viewcut.exe"",0"; Tasks: explorermenu
 Root: HKCU; Subkey: "{#FolderVerb}\command"; ValueType: string; ValueData: """{app}\Viewcut.exe"" --folder ""%1"""; Tasks: explorermenu

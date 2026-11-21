@@ -1,8 +1,8 @@
 # Compact FFmpeg tools
 
-Viewcut copies packets without re-encoding. The release includes only the file protocol,
-MOV/MP4 demuxer and muxers, packet parsers, required bitstream filters and common camera
-audio/video decoders used during stream analysis. libmpv remains the full playback engine.
+Viewcut copies packets without re-encoding. The compact tools include the file protocol,
+MOV/MP4, Matroska/WebM, AVI and MPEG-TS demuxers and muxers, packet parsers, required
+bitstream filters and decoders used during stream analysis. libmpv handles playback.
 
 Source: official FFmpeg `release/8.1`, commit
 `a35157abb96167fd7308edc92b55408d5bb084b0` (8.1.3-34-ga35157abb9).

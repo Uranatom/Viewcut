@@ -409,7 +409,7 @@ internal sealed class MainWindow : Form
         }
         if (!File.Exists(path) || !IsVideo(path))
         {
-            SetStatus(L.F("找不到可用的 MP4 或 MOV：{0}", path));
+            SetStatus(L.F("找不到可用的视频：{0}", path));
             return;
         }
         OpenFile(path);
@@ -431,7 +431,7 @@ internal sealed class MainWindow : Form
         surface.DragDrop += (_, e) => { if (Input(e.Data) is { } path) ActivateInput(path); };
     }
 
-    private static bool IsVideo(string path) => Path.GetExtension(path).ToLowerInvariant() is ".mp4" or ".mov";
+    private static bool IsVideo(string path) => VideoFormats.Supports(path);
 
     private void OpenFile(string path)
     {

@@ -1,3 +1,4 @@
+import { videoFormat } from './formats.js';
 export const copy = value => structuredClone(value);
 export function validateName(name, clips, id) {
   if (!name) return null;
@@ -8,7 +9,7 @@ export function validateName(name, clips, id) {
 }
 export function outputName(source, clip) {
   const base = source.replace(/\.[^.]+$/, '');
-  const ext = /\.mov$/i.test(source) ? '.mov' : '.mp4';
+  const ext = '.' + (videoFormat(source)?.extension ?? 'mp4');
   return (clip.name || `${base}_${String(clip.number).padStart(3, '0')}`) + ext;
 }
 export class Editor {

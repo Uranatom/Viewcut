@@ -1,4 +1,4 @@
-# Viewcut Web 0.6.1
+# Viewcut Web 0.6.2
 
 项目采用 [GNU GPL v3.0](../LICENSE)（SPDX：`GPL-3.0-only`）。静态网页包包含 LICENSE 和 COPYRIGHT；第三方组件声明保留在 third-party-notices.txt。
 
@@ -17,14 +17,17 @@ Mac 包目前未经过 Developer ID 签名与公证，属于开发测试包；�
 安装 Node.js 22 或更新版本，在仓库根目录执行：
 
 ```powershell
+node web/prepare-media.mjs
 node web/server.mjs
 ```
 
 用 Chrome 或 Edge 打开终端显示的 `http://127.0.0.1:4173`。也可运行 `web/Start-Web.ps1`。服务器仅监听本机回环地址，只提供静态页面，不读取素材、不接收视频或导出内容。关闭终端即可停止。不要通过双击 `index.html` 的 `file://` 地址运行：模块与目录权限需要 HTTPS 或 localhost 安全上下文。
 
+静态部署需要包含生成的 ffmpeg-core.js、ffmpeg-core.wasm 和许可证。若部署端配置 CSP，请在 script-src 允许 wasm-unsafe-eval，并使用 application/wasm MIME 类型提供核心文件。
+
 ## 操作
 
-- 在右侧用文件夹图标授权访问素材目录，或用视频图标选择一个或多个 MP4 / MOV。单击选中文件，双击加载视频；双击文件夹进入，面包屑、后退、前进与上一级用于导航。
+- 在右侧用文件夹图标授权访问素材目录，或用视频图标选择一个或多个 MP4、MOV、M4V、MKV、WebM、AVI、TS 或 M2TS 视频。单击选中文件，双击加载视频；双击文件夹进入，面包屑、后退、前进与上一级用于导航。
 - 顶栏只有选择保存目录、打开保存目录与偏好设置。浏览器中的“打开保存目录”会在右侧文件页显示目录。
 - Space 播放／暂停，I 标记起点，O 标记终点；O 只创建片段。点击时间轴右上角导出图标，才会批量导出当前视频的全部片段。
 - 鼠标悬停时间轴显示独立画面预览；拖动片段两端可调整范围并跟随预览。滚轮缩放，Shift + 滚轮平移。
@@ -42,7 +45,7 @@ node web/server.mjs
 
 与桌面版快速无损剪切一样，起点会向前对齐到可用关键帧，因此输出可能包含标记起点之前的少量画面。保留视频／音频样本描述与编码数据，重新生成时间表、编辑列表和块偏移；输出会使用用户标记的结束时间。非音视频的时间码、遥测等附加轨道不导出。
 
-首版支持非分片、未加密、具有一个视频轨道的常见 MP4 / MOV，以及普通编辑列表。分片 MP4、多视频轨道、复杂变速编辑列表、过大索引等会明确提示改用桌面版。HEVC / 10-bit 的播放及缩略图取决于浏览器和本机解码能力；网页无损导出模块独立验证过 HEVC MOV，但不代表所有设备都能在网页播放 HEVC。
+常见 MP4、MOV 和 M4V 使用快速索引导出。MKV、WebM、AVI、TS、M2TS 和部分特殊 MP4/MOV 使用按需加载的 FFmpeg WebAssembly，媒体数据始终留在本机。导出保留原容器并复制音视频。浏览器无法直接解码时，会先生成最高 720p 的本地 H.264/AAC 预览。预览与每个 WebAssembly 输出最多约 256 MiB；较长或大型素材建议用桌面版。导出使用原始视频数据，兼容预览的画质不会影响导出。
 
 浏览器文件访问受授权范围限制，无法提供 Windows 全磁盘树、原生文件右键扩展、回收站、资源管理器右键入口或相同的系统文件关联。文件删除会再次确认并明确说明永久删除。复制／重命名文件夹通过复制后删除完成，失败时原始项目保留；中断的复制可能留下已复制部分。导出取消会中止当前文件并清理该文件，之前已完成的片段会保留。应保持页面打开，避免导出时关闭浏览器。
 
@@ -51,6 +54,7 @@ node web/server.mjs
 ```powershell
 node --test web/tests/model.test.mjs web/tests/media.test.mjs
 node web/tests/browsers.mjs
+node web/tests/formats.mjs
 ```
 
 媒体测试需要 `.tools/ffmpeg/ffmpeg.exe` 和 ffprobe，或用 `VIEWCUT_TEST_TOOLS` 指向完整 FFmpeg。浏览器测试需要 Playwright（用 `VIEWCUT_PLAYWRIGHT` 指定 `playwright/index.mjs`），直接使用本机安装的 Chrome 与 Edge，不下载浏览器，也不使用日常浏览器配置。浏览器原生目录选择器由测试替代，返回真实 OPFS 目录句柄；之后的读写、复制、删除、Worker 导出均走真实浏览器 API。

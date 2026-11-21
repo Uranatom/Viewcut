@@ -14,6 +14,7 @@ jobs:
           node-version: '24'
       - run: |
           command -v ffmpeg || brew install ffmpeg
+          node web/prepare-media.mjs
           sudo /usr/bin/safaridriver --enable
           node web/tests/safari-native.mjs
       - if: always()

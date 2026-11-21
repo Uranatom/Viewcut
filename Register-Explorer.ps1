@@ -5,11 +5,10 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$verbs = @(
-    @{ Key = 'HKCU:\Software\Classes\SystemFileAssociations\.mp4\shell\Viewcut.CullFile'; Text = '用 Viewcut 粗筛'; Mode = '--file' },
-    @{ Key = 'HKCU:\Software\Classes\SystemFileAssociations\.mov\shell\Viewcut.CullFile'; Text = '用 Viewcut 粗筛'; Mode = '--file' },
-    @{ Key = 'HKCU:\Software\Classes\Directory\shell\Viewcut.CullFolder'; Text = '粗筛此文件夹'; Mode = '--folder'; Position = 'Top' }
-)
+$verbs = foreach ($extension in 'mp4', 'mov', 'm4v', 'mkv', 'webm', 'avi', 'ts', 'm2ts') {
+    @{ Key = "HKCU:\Software\Classes\SystemFileAssociations\.$extension\shell\Viewcut.CullFile"; Text = '用 Viewcut 粗筛'; Mode = '--file' }
+}
+$verbs += @{ Key = 'HKCU:\Software\Classes\Directory\shell\Viewcut.CullFolder'; Text = '粗筛此文件夹'; Mode = '--folder'; Position = 'Top' }
 
 if (!$Remove) {
     $Executable = (Resolve-Path -LiteralPath $Executable).Path
