@@ -43,6 +43,7 @@ jobs:
           node web/tests/browsers.mjs
       - name: New video containers across Chrome, Edge and WebKit
         if: ${{ !cancelled() }}
+        timeout-minutes: 5
         run: node web/tests/formats.mjs
       - name: Native launcher
         if: ${{ !cancelled() }}

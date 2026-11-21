@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { serve } from '../server.mjs';
@@ -15,7 +15,7 @@ const fixtures = [
   ['MKV','libx264','aac'], ['webm','libvpx-vp9','libopus'], ['avi','mpeg4','libmp3lame'],
   ['ts','libx264','aac'], ['m2ts','libx264','ac3'],
 ];
-function ff(args) { execFileSync(ffmpeg, ['-v','error', ...args], {windowsHide:true}); }
+function ff(args) { execFileSync(ffmpeg, ['-v','error', ...args], {windowsHide:true, timeout:30000}); }
 for (const [ext, video, audio] of fixtures) {
   ff(['-y','-f','lavfi','-i','testsrc2=size=160x90:rate=24','-f','lavfi','-i','sine=frequency=440',
     '-t','3','-c:v',video,'-g','24','-c:a',audio,...(ext === 'm4v' ? ['-f','mp4'] : []),path.join(output,'sample.'+ext)]);
@@ -33,12 +33,20 @@ try {
   for (const [name, engine, executablePath] of browsers) {
     const browser = await engine.launch({headless:true, executablePath});
     try {
-      const page = await browser.newPage({acceptDownloads:true});
+      const page = await browser.newPage();
       page.on('console', message => { if (message.type() === 'error') console.log(name, message.text()); });
-      await page.addInitScript(() => { window.showDirectoryPicker = undefined; });
+      await page.addInitScript(() => {
+        window.showDirectoryPicker = undefined;
+        const createObjectURL = URL.createObjectURL.bind(URL);
+        URL.createObjectURL = blob => {
+          if (blob.type === 'application/zip') window.viewcutTestArchive = blob;
+          return createObjectURL(blob);
+        };
+      });
       await page.goto(host?.url ?? process.env.VIEWCUT_FORMAT_TEST_URL);
       for (const [ext] of fixtures) {
         const clip = 'sample_001.' + ext.toLowerCase();
+        console.log(`Testing ${name}: ${ext}`);
         await page.locator('#fileInput').setInputFiles(path.join(output, 'sample.' + ext));
         try {
           await page.waitForFunction(filename => document.querySelector('#activeName').textContent === filename &&
@@ -54,9 +62,15 @@ try {
         } catch (error) {
           throw new Error(`${name} ${ext}: ${await page.locator('#status').textContent()}`, {cause:error});
         }
-        const promise = page.waitForEvent('download');
-        await page.locator('[data-action=downloadZip]').click();
-        const archive = await readFile(await (await promise).path());
+        const archive = Buffer.from(await page.evaluate(async () => {
+          const blob = window.viewcutTestArchive;
+          delete window.viewcutTestArchive;
+          document.querySelector('#downloadDialog').close();
+          const bytes = new Uint8Array(await blob.arrayBuffer());
+          let binary = '';
+          for (const byte of bytes) binary += String.fromCharCode(byte);
+          return btoa(binary);
+        }), 'base64');
         assert.equal(archive.readUInt32LE(0), 0x04034b50);
         const nameLength = archive.readUInt16LE(26), dataStart = 30 + nameLength + archive.readUInt16LE(28);
         assert.equal(archive.toString('utf8', 30, 30 + nameLength), clip);

@@ -14,7 +14,15 @@ const script=(value,args=[])=>request('POST',`/session/${session}/execute/sync`,
 async function click(action) { const element=await request('POST',`/session/${session}/element`,{using:'css selector',value:`[data-action="${action}"]`}); const id=element['element-6066-11e4-a52e-4f735466cecf']; await request('POST',`/session/${session}/element/${id}/click`,{}); }
 try{
  await until(()=>request('GET','/status'));
- const created=await request('POST','/session',{capabilities:{alwaysMatch:{browserName:'safari'}}});session=created.sessionId;
+ const capabilities={alwaysMatch:{browserName:'safari'}};
+ let created;
+ try { created=await request('POST','/session',{capabilities}); }
+ catch(error) {
+  if (!error.message.includes('waiting for its RWIApplication')) throw error;
+  execFileSync('/usr/bin/open',['-a','Safari']);
+  created=await request('POST','/session',{capabilities});
+ }
+ session=created.sessionId;
  await request('POST',`/session/${session}/url`,{url});
  await until(()=>script("return document.querySelector('#fileInput').accept.includes('.mkv')&&typeof document.querySelector('#fileInput').onchange==='function'"));
  const sample=path.resolve('artifacts/web-safari/Trip/Day 1/camera.mp4');
